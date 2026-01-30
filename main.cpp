@@ -2,6 +2,9 @@
 #include <d3d12.h>    // D3D12核心头文件
 #include <dxgi1_4.h>  // DXGI核心头文件
 
+#pragma comment(lib,"d3d12.lib")  //链接D3D12库文件
+#pragma comment(lib,"dxgi.lib")   //链接DXGI库文件
+
 
 
 LPCTSTR gWindowClassName = L"BattleFire";//ASCII   LPCTSTR是常量字符串指针宏  为啥不用const wchar_t* ？   主要是为了适配  一套代码，不用修改，只切换项目编码配置，就能支持两种字符编码
@@ -35,8 +38,6 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	hResult = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgiFactory));   //是这样： #define IID_PPV_ARGS(ppType) __uuidof(**(ppType)), IID_PPV_ARGS_Helper(ppType)
 	////////////////总结：DXGI 工厂是「连接 DX12 和显卡硬件的中转站」，必须先创建成功。
 
-
-
 	if (FAILED(hResult))    //#define FAILED(hr) (((HRESULT)(hr)) < 0)
 	{
 		return false;
@@ -47,7 +48,6 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 	bool adapterFound = false;//是否创建成功的标志
 	
-	IDXGIAdapter1* adapter;  // 遍历并筛选有效显卡适配器 ）
 	while(dxgiFactory->EnumAdapters1(adapterIndex,&adapter)!= DXGI_ERROR_NOT_FOUND)  //#define DXGI_ERROR_NOT_FOUND             _HRESULT_TYPEDEF_(0x887A0002L)
 	{
 		DXGI_ADAPTER_DESC1 desc;
