@@ -1,8 +1,96 @@
 #include <windows.h>   // 窗口
+#include <d3d12.h>    // D3D12核心头文件
+#include <dxgi1_4.h>  // DXGI核心头文件
 
 
 
 LPCTSTR gWindowClassName = L"BattleFire";//ASCII   LPCTSTR是常量字符串指针宏  为啥不用const wchar_t* ？   主要是为了适配  一套代码，不用修改，只切换项目编码配置，就能支持两种字符编码
+ID3D12Device* gD3D12Device = nullptr; //D3D12设备指针 全局变量	
+
+
+//D3D12初始化函数
+bool InitD3D12(HWND inhwnd,int inWidth,int inHeight) 
+{
+
+	HRESULT hResult;	//COM 接口操作的返回值类型（DX12 的所有接口方法 / 创建函数，返回值都是HRESULT），用于判断「操作是否成功」
+
+	UINT dxgiFactoryFlags = 0;
+
+#ifdef DEBUG
+	{
+		ID3D12Debug* debugController = nullptr;  //初始化结构体指针（空值）
+
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) //如果成功获取调试接口 D3D12GetDebugInterface就是用来获取调试接口的函数
+		{
+
+			debugController->EnableDebugLayer(); //启用调试层 这知道这个功能就好了
+			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;  //给dxgiFactoryFlags变量「开启」DXGI_CREATE_FACTORY_DEBUG这个标志位，启用 DXGI 工厂的调试功能
+		}
+
+	}
+#endif
+
+	IDXGIFactory4* dxgiFactory;  //DXGI工厂接口指针
+
+	hResult = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgiFactory));   //是这样： #define IID_PPV_ARGS(ppType) __uuidof(**(ppType)), IID_PPV_ARGS_Helper(ppType)
+	////////////////总结：DXGI 工厂是「连接 DX12 和显卡硬件的中转站」，必须先创建成功。
+
+
+
+	if (FAILED(hResult))    //#define FAILED(hr) (((HRESULT)(hr)) < 0)
+	{
+		return false;
+	}
+
+	IDXGIAdapter1* adapter;  //显卡适配器指针 包括独立显卡、集成显卡、软件模拟显卡
+	int adapterIndex = 0;  //适配器索引
+
+	bool adapterFound = false;//是否创建成功的标志
+	
+	IDXGIAdapter1* adapter;  // 遍历并筛选有效显卡适配器 ）
+	while(dxgiFactory->EnumAdapters1(adapterIndex,&adapter)!= DXGI_ERROR_NOT_FOUND)  //#define DXGI_ERROR_NOT_FOUND             _HRESULT_TYPEDEF_(0x887A0002L)
+	{
+		DXGI_ADAPTER_DESC1 desc;
+
+		adapter->GetDesc1(&desc);  // 取出
+
+		if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)
+		{
+			continue; // 这是软件渲染？？？  跳过
+		}
+
+		//硬件适配器  试着创建D3D12设备 要么是GPU 要么是集成显卡？  11只后是有computer shader的
+		hResult = D3D12CreateDevice(adapter,D3D_FEATURE_LEVEL_11_0,__uuidof(ID3D12Device),nullptr);
+
+		//如果创建成功 说明找到了合适的适配器
+		if (SUCCEEDED(hResult))
+		{
+			adapterFound = true;
+			break;
+
+		}
+
+		adapterIndex++; //索引++
+
+	}
+
+	if(false == adapterFound) //？？为什么这么写
+	{
+		return false;
+	}
+	hResult = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&gD3D12Device));
+	if (FAILED(hResult))
+	{
+		return false ;
+
+	}
+
+
+	//DX12初始化代码
+}
+
+
+
 
 
 
@@ -69,8 +157,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	//////////////////////////////////////////////////////////////////////----------creat 创建------------////////////////////////////////////////////////////////////////////////////////
 
-	int viewportWidth = 800;
-	int viewportHeight = 600;  //画布的长宽 DX12渲染画布的客户区大小（核心，不包含窗口边框/标题栏）
+	int viewportWidth = 1280;
+	int viewportHeight = 720;  //画布的长宽 DX12渲染画布的客户区大小（核心，不包含窗口边框/标题栏）
 
 	RECT rect;  //这也是个结构体
 	rect.left = 0;
@@ -93,6 +181,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		NULL,
 		hInstance,
 		NULL);
+
+	//hwnd是窗口实例的唯一句柄（索引），通过它间接操作系统内存中的窗口实例(当然 初学阶段直接理解为窗口实例也ok)
 
 	//这个函数的参数
 	//HWND CreateWindowEx(
@@ -126,9 +216,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	//////////////////////////////////////////////////////////////////////----------show 显示------------////////////////////////////////////////////////////////////////////////////////
 
 
-
+	InitD3D12(hwnd, viewportWidth, viewportHeight); //初始化D3D12
 	ShowWindow(hwnd, inShowCmd);
 	UpdateWindow(hwnd);
+
 
 	MSG msg;
 	while (true) {
