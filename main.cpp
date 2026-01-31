@@ -8,7 +8,11 @@
 
 
 LPCTSTR gWindowClassName = L"BattleFire";//ASCII   LPCTSTR是常量字符串指针宏  为啥不用const wchar_t* ？   主要是为了适配  一套代码，不用修改，只切换项目编码配置，就能支持两种字符编码
-ID3D12Device* gD3D12Device = nullptr; //D3D12设备指针 全局变量	
+
+
+// 【渲染指挥官】ID3D12Device 接口指针
+// 它是逻辑上的 GPU，负责创建所有渲染资源（纹理、缓存）和管线状态（PSO）
+ID3D12Device* gD3D12Device = nullptr; 
 
 
 //D3D12初始化函数
@@ -21,7 +25,7 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 #ifdef DEBUG
 	{
-		ID3D12Debug* debugController = nullptr;  //初始化结构体指针（空值）
+		ID3D12Debug* debugController = nullptr;  //初始化接口指针（空值） 是的这是个COM接口
 
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) //如果成功获取调试接口 D3D12GetDebugInterface就是用来获取调试接口的函数
 		{
@@ -33,34 +37,39 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	}
 #endif
 
-	IDXGIFactory4* dxgiFactory;  //DXGI工厂接口指针
+	/////////////////////////////////////////////////////////////////////总结：DXGI 工厂是「连接 DX12 和显卡硬件的中转站」，必须先创建成功。 
 
+	// 1. 声明DXGI工厂接口指针（空架子，无有效地址）
+	IDXGIFactory4* dxgiFactory;  
+
+	// 2. 调用专门的创建函数，创建DXGI工厂实例，给指针赋值有效地址
 	hResult = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgiFactory));   //是这样： #define IID_PPV_ARGS(ppType) __uuidof(**(ppType)), IID_PPV_ARGS_Helper(ppType)
-	////////////////总结：DXGI 工厂是「连接 DX12 和显卡硬件的中转站」，必须先创建成功。
-
+	
+	//3. 判断创建是否失败，失败则直接返回false，终止DX12初始化（没有工厂后续步骤无法进行）
 	if (FAILED(hResult))    //#define FAILED(hr) (((HRESULT)(hr)) < 0)
 	{
 		return false;
 	}
 
-	IDXGIAdapter1* adapter;  //显卡适配器指针 包括独立显卡、集成显卡、软件模拟显卡
-	int adapterIndex = 0;  //适配器索引
 
+	IDXGIAdapter1* adapter;  //显卡适配器指针 包括独立显卡、集成显卡、软件模拟显卡 这也是个COM接口指针
+	int adapterIndex = 0;  //适配器索引
 	bool adapterFound = false;//是否创建成功的标志
 	
-	while(dxgiFactory->EnumAdapters1(adapterIndex,&adapter)!= DXGI_ERROR_NOT_FOUND)  //#define DXGI_ERROR_NOT_FOUND             _HRESULT_TYPEDEF_(0x887A0002L)
+	while (dxgiFactory->EnumAdapters1(adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND)  //#define DXGI_ERROR_NOT_FOUND  这个宏表示没有找到显卡    EnumAdapters1是枚举显卡适配器的函数是DXGI工厂的一个方法    dxgiFactory会把适配器的地址写到你的 adapter 变量里 那么adapter就有值了（指向比如RTX4090的地址）
 	{
-		DXGI_ADAPTER_DESC1 desc;
+		DXGI_ADAPTER_DESC1 desc;  //显卡描述结构体  存储显卡的信息（显卡名称、厂商 ID、显存大小、硬件级别等）
 
-		adapter->GetDesc1(&desc);  // 取出
+		adapter->GetDesc1(&desc);  // GetDesc1又是显卡适配器的一个方法  把显卡的信息写到desc结构体里
 
-		if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)
+		if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)  // DXGI_ADAPTER_FLAG_SOFTWARE是软件模拟显卡  这是“位掩码”的写法 记住“Flags & 枚举值”的写法
 		{
-			continue; // 这是软件渲染？？？  跳过
+			continue; // 这是软件渲染？？？  就跳过
 		}
 
-		//硬件适配器  试着创建D3D12设备 要么是GPU 要么是集成显卡？  11只后是有computer shader的
-		hResult = D3D12CreateDevice(adapter,D3D_FEATURE_LEVEL_11_0,__uuidof(ID3D12Device),nullptr);
+		//硬件适配器  试着创建D3D12设备 要么是独显 要么是集成显卡？  11只后是有computer shader的  然后返回结果给hResult
+		hResult = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), nullptr);  //创建的是一个“逻辑显卡”  物理显卡是真的显卡 逻辑显卡是你在代码里对这块硬件的操控手柄 用他分配内存创建管线管理同步 这里是NULL表示不需要这个设备接口指针地址  只想测试能不能创建成功
+		                                                                                               //adapter 在循环的每一次都会指向一个完全不同的内存地址（代表不同的显卡硬件）。 如果测试创建成功，说明找到了合适的显卡适配器，可以用它来创建真正的 D3D12 设备。
 
 		//如果创建成功 说明找到了合适的适配器
 		if (SUCCEEDED(hResult))
@@ -74,11 +83,11 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 	}
 
-	if(false == adapterFound) //？？为什么这么写
+	if(false == adapterFound) //防御性编程，避免把相等判断（==）误写成赋值操作（=）
 	{
 		return false;
 	}
-	hResult = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&gD3D12Device));
+	hResult = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&gD3D12Device));//真正创建逻辑显卡  （DX12设备指针）
 	if (FAILED(hResult))
 	{
 		return false ;
