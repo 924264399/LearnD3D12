@@ -13,6 +13,9 @@ LPCTSTR gWindowClassName = L"BattleFire";//ASCII   LPCTSTR是常量字符串指针宏  为
 // 【渲染指挥官】ID3D12Device 接口指针
 // 它是逻辑上的 GPU，负责创建所有渲染资源（纹理、缓存）和管线状态（PSO）
 ID3D12Device* gD3D12Device = nullptr; 
+ID3D12CommandQueue* gCommandQueue = nullptr; //命令队列com接口指针
+
+IDXGISwapChain3* gSwapChain = nullptr; //交换链com接口指针
 
 
 //D3D12初始化函数
@@ -95,7 +98,48 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	}
 
 
-	//DX12初始化代码
+	D3D12_COMMAND_QUEUE_DESC d3d12CommandQueueDesc = {}; //命令队列描述结构体 12开始就要依赖command queue了  以前是直接设备画图
+	hResult = gD3D12Device->CreateCommandQueue(&d3d12CommandQueueDesc, IID_PPV_ARGS(&gCommandQueue)); //创建命令队列  是逻辑显卡（Device） 和 显卡的 中间桥梁  通过命令队列把渲染命令传给显卡  这里看到是用 Device 去创建命令队列的 因为命令队列是逻辑显卡的一个子系统
+																										//如果你电脑上有两块显卡（独显和核显），你会创建两个 Device。每个 Device 创建出的 Command Queue 只会把活儿发给它自己的那个 GPU。
+																										//这里传入空的二级指针 创建成功的命令队列地址会写到 gCommandQueue 指针里
+
+	if (FAILED(hResult))
+	{
+		return false;
+	}
+
+
+	DXGI_SWAP_CHAIN_DESC swapChainDesc = {}; //交换链描述结构体  是屏幕和显卡之间的桥梁（相当于中间的几个画布 先画好再传给屏幕）  既然是屏幕和显卡的桥梁 那么你看结构体的成员就全是关于画布的描述 
+
+	swapChainDesc.BufferCount = 2; //双缓冲  或者 3缓冲  单缓冲一般会卡  双缓冲性能可以开到6成	3缓冲是一定能跑满显示器帧率和显卡负载的（利用率极致啊bro
+	swapChainDesc.BufferDesc = {}; //缓冲区描述结构体
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; //缓冲区用作渲染目标输出
+	swapChainDesc.BufferDesc.Width = inWidth;  //画布宽
+	swapChainDesc.BufferDesc.Height = inHeight; //画布高
+	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; //画布格式  32位颜色格式 8位红绿蓝alpha
+	swapChainDesc.OutputWindow = inhwnd; //输出窗口句柄
+	swapChainDesc.SampleDesc.Count = 1; //多重采样数量MSAA  1表示不使用多重采样
+	swapChainDesc.Windowed = TRUE; //窗口模式 没有全屏
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; //交换效果 丢弃模式  这个模式只支持双缓冲和三缓冲
+
+
+	IDXGISwapChain* swapChain = nullptr; //交换链临时指针  这里不是3接口 因为CreateSwapChain只能创建到2接口（这是低版本的 所以下面要转到高版本）
+	dxgiFactory->CreateSwapChain(
+		gCommandQueue, //命令队列指针  通过命令队列把渲染好的画布传给交换链
+		&swapChainDesc, //交换链描述结构体地址
+		&swapChain //交换链指针二级地址
+	);
+
+	gSwapChain = static_cast<IDXGISwapChain3*>(swapChain);//交换链指针 转成3接口指针 赋值给全局变量 
+														  //static_cast关键字 静态类型转换 强制转化 语法是static_cast<目标类型>(待转换变量/指针)
+														  //IDXGISwapChain3 和 IDXGISwapChain 是COM 接口的版本迭代关系，高版本接口 IDXGISwapChain3 继承自低版本接口 IDXGISwapChain（就像 C++ 中子类继承父类），两者完全兼容，所以可以用 static_cast 进行转换。  
+														  // 这样做的原因是版本迭代后，低版本接口的方法可能不够用，需要使用高版本接口新增的方法和功能。
+
+
+
+
+
+	return true;
 }
 
 
