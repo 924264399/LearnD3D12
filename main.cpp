@@ -16,7 +16,7 @@ ID3D12Device* gD3D12Device = nullptr;
 ID3D12CommandQueue* gCommandQueue = nullptr; //命令队列com接口指针
 
 IDXGISwapChain3* gSwapChain = nullptr; //交换链com接口指针
-
+ID3D12Resource* gDSRT =	nullptr; // 显存资源接口（buffer 或者 贴图）
 
 //D3D12初始化函数
 bool InitD3D12(HWND inhwnd,int inWidth,int inHeight) 
@@ -65,9 +65,9 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 		adapter->GetDesc1(&desc);  // GetDesc1又是显卡适配器的一个方法  把显卡的信息写到desc结构体里
 
-		if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)  // DXGI_ADAPTER_FLAG_SOFTWARE是软件模拟显卡  这是“位掩码”的写法 记住“Flags & 枚举值”的写法
+		if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)  // DXGI_ADAPTER_FLAG_SOFTWARE是软件模拟显卡  这是“位掩码”的写法 记住“Flags & 枚举值”的写法   并且内存要大于你设定的值 这里我设置的是512
 		{
-			continue; // 这是软件渲染？？？  就跳过
+			continue; // 如果是软件模拟显卡 或者是  显存
 		}
 
 		//硬件适配器  试着创建D3D12设备 要么是独显 要么是集成显卡？  11只后是有computer shader的  然后返回结果给hResult
@@ -82,7 +82,7 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 		}
 
-		adapterIndex++; //索引++
+		adapterIndex++; //索引++  注意这个index是和具体显卡绑定的  这里其实是可以拿到这个index的 有了这个index 你可以用这个index去创建CommittedResource（申请显存你得知道你要在哪个显卡上申请啊）
 
 	}
 
@@ -132,10 +132,52 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 	gSwapChain = static_cast<IDXGISwapChain3*>(swapChain);//交换链指针 转成3接口指针 赋值给全局变量 
 														  //static_cast关键字 静态类型转换 强制转化 语法是static_cast<目标类型>(待转换变量/指针)
+	
+														  
+														  
 														  //IDXGISwapChain3 和 IDXGISwapChain 是COM 接口的版本迭代关系，高版本接口 IDXGISwapChain3 继承自低版本接口 IDXGISwapChain（就像 C++ 中子类继承父类），两者完全兼容，所以可以用 static_cast 进行转换。  
 														  // 这样做的原因是版本迭代后，低版本接口的方法可能不够用，需要使用高版本接口新增的方法和功能。
 
 
+
+	
+
+	D3D12_HEAP_PROPERTIES d3dHeapProperties = {}; //堆属性结构体  你要申请显存 得告诉显卡这个读写的具体位置
+												//包括了默认堆  上传堆 回读堆 三种 D3D12_HEAP_TYPE_DEFAULT  和 D3D12_HEAP_TYPE_UPLOAD 和D3D12_HEAP_TYPE_READBACK
+												//权限分别是GPU专属读写   CPU读GPU写   GPU写CPU读
+												
+	d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT; //默认堆 
+	//d3dHeapProperties.CreationNodeMask = 0;   //你在哪个显卡上创建这个内存 这里比较麻烦 就是对于多显卡的电脑
+	//d3dHeapProperties.VisibleNodeMask = 0;   //这里都是写0  是指向我自己电脑的第0号GPU  但是实际项目不是这么写的 要指向实际GPU的index的
+
+	D3D12_RESOURCE_DESC d1312ResourceDesc = {}; //资源描述符结构体
+	d1312ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
+	d1312ResourceDesc.Alignment = 0;
+	d1312ResourceDesc.Width = inWidth;
+	d1312ResourceDesc.Height = inHeight;
+	d1312ResourceDesc.DepthOrArraySize = 1; //1张贴图 如果是cubemap 给6（因为cubemap 本质是一个array）
+	d1312ResourceDesc.MipLevels = 0; //不要mip 
+	d1312ResourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;  //这就是D24格式 记得吗  24位存深度（Depth），8位存模板（Stencil）
+	d1312ResourceDesc.SampleDesc.Count = 1; //没有MSAA这些
+	d1312ResourceDesc.SampleDesc.Quality = 0;  //关闭MSAA的化 这里必须是0  只有开启了MSAA才有意义 
+	d1312ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  //就是创建出来用来干啥的  有纹理采样  有用来当RT的  目前先设置为UKNOWN 
+	d1312ResourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL; //这是啥子？
+
+
+	D3D12_CLEAR_VALUE dsClearValue = {}; //预设的扫除值结构体  显卡渲染每一帧前，都要清空深度缓冲  如果你告诉显卡：“我以后每次清空深度图都会用 1.0 这个值”，显卡硬件会针对这个特定值进行电路级优化（叫做 Fast Clear）。如果你后续清空时的值和这里设的不一样，渲染就会变慢。
+	dsClearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	dsClearValue.DepthStencil.Depth = 1.0f;
+	dsClearValue.DepthStencil.Stencil = 0;
+
+	gD3D12Device->CreateCommittedResource(
+		&d3dHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&d1312ResourceDesc, 
+		D3D12_RESOURCE_STATE_DEPTH_WRITE, //表示初始化出来就可以被写入深度
+		&dsClearValue,
+		IID_PPV_ARGS(&gDSRT)
+	
+	);
 
 
 
