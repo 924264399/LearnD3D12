@@ -16,7 +16,15 @@ ID3D12Device* gD3D12Device = nullptr;
 ID3D12CommandQueue* gCommandQueue = nullptr; //命令队列com接口指针
 
 IDXGISwapChain3* gSwapChain = nullptr; //交换链com接口指针
-ID3D12Resource* gDSRT =	nullptr; // 显存资源接口（buffer 或者 贴图）
+ID3D12Resource* gDSRT =	nullptr,*gColorRTs[2]; // 显存资源接口（buffer 或者 贴图）   这个的2个RT是给交互链用的 1个depthbuffer也是给交互链用的
+
+ID3D12DescriptorHeap* gSwapChainRTVHeap = nullptr; //这个COM接口就是给RTV和DSV 申请内存 （是「CPU/GPU 均可访问的共享内存 / 显存」）
+ID3D12DescriptorHeap* gSwapChainDSVHeap = nullptr; //
+
+UINT gRTVDescriptorSize = 0; //描述符大小  每个显卡厂商的显卡  这个值都不一样  所以要动态获取
+UINT gDSVDescriptorSize = 0; //描述符大小
+
+
 
 //D3D12初始化函数
 bool InitD3D12(HWND inhwnd,int inWidth,int inHeight) 
@@ -178,6 +186,60 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 		IID_PPV_ARGS(&gDSRT)
 	
 	);
+
+
+	/////////////////////////////现在开始初始化RTV 和 DSV  就是RT和Depth buffer的使用说明书  
+
+
+	D3D12_DESCRIPTOR_HEAP_DESC d3dDescriptorHeapDescRTV = {}; //就是为了CreateDescriptorHeap 函数提供「创建描述符堆的「配置清单 / 需求说明书」」
+	d3dDescriptorHeapDescRTV.NumDescriptors = 2; //需要两  因为Swap Chain我们设置是双缓冲  有两RT 需要两
+	d3dDescriptorHeapDescRTV.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV; //类型是RTV
+
+	gD3D12Device->CreateDescriptorHeap(
+		&d3dDescriptorHeapDescRTV,
+		IID_PPV_ARGS(&gSwapChainRTVHeap)
+	); //这句只是在给 RTV 申请“宿舍（内存）
+	gRTVDescriptorSize = gD3D12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV); //获取RTV描述符大小  每个显卡厂商的显卡  这个值都不一样  所以要动态获取 态获取每个 RTV 描述符占用的内存大小。
+	//因为不同显卡厂商的驱动，对描述符的内存布局定义不同，这个值不是固定的（可能是 32 字节、64 字节等）。后续你要访问「第二个 RTV」时，需要通过「第一个 RTV 句柄 + gRTVDescriptorSize」来计算它的偏移量，找到对应的描述符（相当于「钥匙柜的第二个抽屉」）。
+
+
+
+	D3D12_DESCRIPTOR_HEAP_DESC d3dDescriptorHeapDescDSV = {}; //
+	d3dDescriptorHeapDescDSV.NumDescriptors = 1; //DSV我们只需要一个 因为交互链只需要一个depth buffer
+	d3dDescriptorHeapDescDSV.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV; //类型是DSV
+
+	gD3D12Device->CreateDescriptorHeap(
+		&d3dDescriptorHeapDescDSV,
+		IID_PPV_ARGS(&gSwapChainDSVHeap)
+	); //给DSV申请内存
+	gDSVDescriptorSize = gD3D12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV); //获取DSV描述符大小  每个显卡厂商的显卡  这个值都不一样  所以要动态获取
+
+
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHeapStart = gSwapChainRTVHeap->GetCPUDescriptorHandleForHeapStart(); // 你刚申请的那块内存的第一个内存地址（这里是RTV的申请内存）
+
+
+	// 此时创建真正的RTV 用的CreateRenderTargetView函数
+	for (int i = 0;i < 2;i++) //循环两次 对应双缓冲
+	{
+		gSwapChain->GetBuffer(i, IID_PPV_ARGS(&gColorRTs[i]));  //// 绑定的 RT 资源载体（交换链自动创建的缓冲区）  从交换链（gSwapChain）中，取出第 i 个后台缓冲区资源，存入 gColorRTs[i] 数组中（这就是你之前疑惑的「交换链自动创建的 RT 资源」）。
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvPointer;  //定义临时的 RTV 具体位置句柄
+		rtvPointer.ptr = rtvHeapStart.ptr + i * gRTVDescriptorSize;  //计算 RTV 的具体存储位置   初始地址 +   RTV 描述符占用的内存大小 * i
+		gD3D12Device->CreateRenderTargetView(
+			gColorRTs[i],
+			nullptr,
+			rtvPointer //上一句计算好的地址
+		); //创建真正的 RTV 并存入堆中
+
+	}
+
+	// 这又是啥？ 定义 DSV 的「自定义配置说明书」结构体
+	D3D12_DEPTH_STENCIL_VIEW_DESC d3dDSViewDesc = {};
+	d3dDSViewDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	d3dDSViewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+	//此时创建真正的DSV
+	gD3D12Device->CreateDepthStencilView(gDSRT, &d3dDSViewDesc, gSwapChainDSVHeap->GetCPUDescriptorHandleForHeapStart()); //这里链接了gDSRT（即为depthrt开辟的内存块）
+
 
 
 
