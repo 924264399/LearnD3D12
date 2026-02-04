@@ -25,6 +25,14 @@ UINT gRTVDescriptorSize = 0; //ÃèÊö·û´óÐ¡  Ã¿¸öÏÔ¿¨³§ÉÌµÄÏÔ¿¨  Õâ¸öÖµ¶¼²»Ò»Ñù  Ë
 UINT gDSVDescriptorSize = 0; //ÃèÊö·û´óÐ¡
 
 
+ID3D12CommandAllocator* gCommandAllocator = nullptr; //ÃüÁî·ÖÅäÆ÷COM½Ó¿ÚÖ¸Õë  ¸ºÔðÏÔ´æµÄ·ÖÅäºÍ¹ÜÀí£¨¾ÍÊÇ¸øÃüÁîÁÐ±í·ÖÅäÄÚ´æÓÃµÄ£©
+ID3D12CommandList* gCommandList = nullptr; //ÃüÁî¶ÓÁÐCOM½Ó¿ÚÖ¸Õë  ¸ºÔð¼ÇÂ¼äÖÈ¾ÃüÁî£¨¾ÍÊÇ»­Í¼ÓÃµÄ£©
+
+ID3D12Fence* gFence = nullptr; //
+HANDLE gFenceEvent = nullptr;
+
+UINT64 gFenceValue = 0;
+
 
 //D3D12³õÊ¼»¯º¯Êý
 bool InitD3D12(HWND inhwnd,int inWidth,int inHeight) 
@@ -242,10 +250,88 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 
 
 
+	////////////////////////////////////////////////////-----------------------ÃüÁî·ÖÅäÆ÷ºÍÃüÁîÁÐ±íµÄ´´½¨
+
+	gD3D12Device->CreateCommandAllocator(
+		D3D12_COMMAND_LIST_TYPE_DIRECT, //Ö±½ÓÃüÁîÁÐ±íÀàÐÍ Õâ¸öÄÜÓÃÀ´»­Í¼ ÄÜÓÃcomputer shader  »¹ÓÐÖîÈçBUNDLE£¨¶àÏß³Ì£©  »¹ÓÐCOPY£¨¿½±´ÃüÁîÁÐ±í£©  »¹ÓÐCOMPUTE£¨×¨ÃÅcomputer shader£©
+		IID_PPV_ARGS(&gCommandAllocator)
+	); //´´½¨ÃüÁî·ÖÅäÆ÷   ÕâÊÇ¡°Ö½¡± ¸ºÔðÄÚ´æ
+
+
+	gD3D12Device->CreateCommandList(
+		0,  //0ºÅGPU
+		D3D12_COMMAND_LIST_TYPE_DIRECT,
+		gCommandAllocator,//´«ÈëÃüÁî·ÖÅäÆ÷£º»ñÈ¡ÄÚ´æ£¨Ö½ÕÅ£©
+		nullptr,
+		IID_PPV_ARGS(&gCommandList)
+	); //´´½¨ÃüÁîÁÐ±í   ÕâÊÇ¡°±Ê¡± ¸ºÔð¼ÇÂ¼
+
+
+	///CommandAllocator ºÍ CommandList ºÍ CommandQueue Ö®¼äµÄ¹ØÏµ×Ü½á£º Ö½£¨ÄÚ´æ£©  ±Ê£¨¼ÇÂ¼£© ºÍ  ´«ËÍ´ø
+
+
+	///////////////////////////////////////////////////-------------------------cpuºÍGPUµÄÍ¬²½»úÖÆ Ê¹ÓÃFence ºÍ Event
+
+
+	 //ÕâÊÇÕ¤À¸ ÊÇ¼ÆÊýÆ÷ cpu  
+	//1. CPU ÃüÁî GPU£º¡°¸ÉÍêÕâÐ©»îºó£¬°Ñ Fence µÄÖµ¼Óµ½ 1¡£¡±
+	//2. CPU ¾ÍÔÚÅÔ±ßµÈ×Å£¬¿´ Fence ÊÇ²»ÊÇµ½ 1 ÁË¡£
+	//3. µ½ÁË 1£¬ËµÃ÷ GPU Ö®Ç°µÄ»î¸ÉÍêÁË£¬CPU ²ÅÄÜ·ÅÐÄµØÖØÓÃÄÚ´æ¡£
+	gD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gFence));
+
+
+
+	//ÕâÊÇÊÂ¼þ ÊÇÒ»¸öÄÖÖÓ CPU Èç¹ûÏëËÀµÈ GPU£¬Ëü²»ÄÜÒ»Ö±ËÀÑ­»·¶¢×Å Fence£¨ÄÇÌ«·ÑµçÁË£©¡£Ëü»á´´½¨Ò»¸ö Event£¬¸æËßÏµÍ³£º¡°µÈ Fence µ½Ä³¸öÖµµÄÊ±ºò£¬ÌáÐÑÎÒ
+	gFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr); //ÕâÊÇÉ¶
+
+
 
 	return true;
 }
 
+
+//¼ì²é£º¿´Ò»ÑÛ GPU ½ø¶È£¨GetCompletedValue£©¡£
+//µÇ¼Ç£ºÈç¹ûÃ»¸ÉÍê£¬¸æËßÏµÍ³¡°¸ÉÍêºó½ÐÐÑÎÒ¡±£¨SetEventOnCompletion£©¡£
+//ÐÝÃß£ºCPU ±ÕÑÛË¯¾õ£¨WaitForSingleObject£©¡£
+
+void WaitForCompletionOfCommandList()
+{
+	if (gFence->GetCompletedValue() < gFenceValue) //²éÑ¯fenceµÄÖµ Èç¹û·µ»ØÖµ < Ä¿±êÖµ£ºËµÃ÷ GPU »¹ÔÚ¸É»î£¨½ø¶ÈÅÆÊý×Ö < Ä¿±ê±àºÅ£©£¬ÐèÒª½øÈëµÈ´ýÁ÷³Ì£»    Èç¹û·µ»ØÖµ ¡Ý Ä¿±êÖµ£ºËµÃ÷ GPU ÒÑ¾­¸ÉÍêÁË£¨½ø¶ÈÅÆÊý×Ö ¡Ý Ä¿±ê±àºÅ£©£¬Ö±½ÓÌø¹ýµÈ´ý£¬CPU ¼ÌÐø¸É»î¡£
+	{
+		gFence->SetEventOnCompletion(gFenceValue, gFenceEvent); //ÉèÖÃÄÖÖÓ Ê×ÏÈÕâ¾äÄÜÖ´ÐÐ ÄÇ¿Ï¶¨ÊÇGPU»¹ÔÚ¸É»î    ·­Òë³ÉÈË»°¾ÍÊÇ£ºÔ¤Ô¼Ò»¸ö¡°Íê¹¤ÄÖÖÓ¡°
+		                                                        //¸æËßÏµÍ³£º¡°µÈ Fence£¨¼ÆÊýÆ÷£©µÄÖµ´ïµ½ gFenceValue£¨Ä¿±ê±àºÅ£©Ê±£¬´¥·¢ gFenceEvent£¨ÄÖÖÓÊÂ¼þ£©¡±£¬ÌáÐÑ CPU ¿ÉÒÔ¼ÌÐø¹¤×÷ÁË¡£ 
+																//Õâ¸öÆäÊµÊÇDX12°ïÄã·â×°µÄ  ²»È»ÄãÐèÒªÒ»Ö±Ñ­»·È¥²éÑ¯fenceµÄÖµ  ÕâÑùºÜÀË·ÑCPU×ÊÔ´
+
+		WaitForSingleObject(gFenceEvent, INFINITE);   //ÕâÊÇ Windows ÏµÍ³µÄ API£¨²»ÊÇ D3D12 ×¨Êô£©¡£Ëü»áÈÃµ±Ç°µÄ CPU Ïß³Ì½øÈë×èÈû×´Ì¬£¨Sleep£©£¬²»ÔÙÏûºÄ CPU Ñ­»·
+													//¾ÍÊÇÃ»Íê¹¤µÄ»¯ £¬cpu¾ÍÊÇÐÝÃß×´Ì¬
+													//µ±È»ÄãÕâÑùÈÃcpuÐÝÃß ÄÇ¿Ï¶¨ÔÚÏîÄ¿Àï²»ÊÇÕâÑùµÄ ÕâÊÇÑÝÊ¾ÓÃµÄ Ã¿Ö¡Ó²Í¬²½
+													// Êµ¼ÊÏîÄ¿ÊÇ £ºCPU »áÈ¥¸É±ðµÄ»î¶ù£¨±ÈÈç×¼±¸ÏÂÒ»Ö¡µÄÊý¾Ý£©£¬µÈµ½ÏÂÒ»Ö¡ÐèÒªÓÃµ½ GPU ½á¹ûÊ±£¬ÔÙÀ´¼ì²é Fence µÄÖµ£¬¿´ GPU ÓÐÃ»ÓÐ¸ÉÍê¡£Èç¹ûÃ»¸ÉÍê£¬CPU ÔÙµÈ£»¸ÉÍêÁË£¬CPU ÔÙ¼ÌÐø¡£ ¡°¶àÖ¡Èë¶Ó¡±£¨Multi-frame In-flight" cpuÓÀÔ¶±ÈgpuÁìÏÈ GPU 1-2 Ö¡ 
+													
+
+	}
+
+}
+
+
+
+
+void EndCommandList()
+{
+	//CommanList
+
+
+
+	//Ä¿Ç°»¹È±ÉÙÍ£Ö¹¼ÇÂ¼ÃüÁî£¨½º´ø·âÏä£© ºÍ  ÕýÊ½Ìá½»GPUµÄ²½Öè
+
+
+	//±ê¼ÇÀï³Ì±®
+	gFenceValue += 1;
+
+	// 2. ÈÃ CommandQueue£¨¿ìµÝÔ±£©¸ø Fence£¨¼ÆÊýÆ÷£©·¢ÐÅºÅ£º Íê³ÉÖ®ºó ÉèÖÃÕâÅúÖ¸ÁîµÄÄ¿±ê±àºÅ
+	//ÒâË¼ÊÇ Õâ¡°Àº×Ó¡±»î¶ù¸ÉÍêÁË£¬ÄãÔÙ°ÑÊý×Ö¸ÄÁË
+	gCommandQueue->Signal(gFence, gFenceValue);
+
+}
 
 
 
