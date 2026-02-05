@@ -17,6 +17,9 @@ ID3D12CommandQueue* gCommandQueue = nullptr; //命令队列com接口指针
 
 IDXGISwapChain3* gSwapChain = nullptr; //交换链com接口指针
 ID3D12Resource* gDSRT =	nullptr,*gColorRTs[2]; // 显存资源接口（buffer 或者 贴图）   这个的2个RT是给交互链用的 1个depthbuffer也是给交互链用的
+int gCurrentRTIndex = 0; // LYY
+
+
 
 ID3D12DescriptorHeap* gSwapChainRTVHeap = nullptr; //这个COM接口就是给RTV和DSV 申请内存 （是「CPU/GPU 均可访问的共享内存 / 显存」）
 ID3D12DescriptorHeap* gSwapChainDSVHeap = nullptr; //
@@ -28,10 +31,51 @@ UINT gDSVDescriptorSize = 0; //描述符大小
 ID3D12CommandAllocator* gCommandAllocator = nullptr; //命令分配器COM接口指针  负责显存的分配和管理（就是给命令列表分配内存用的）
 ID3D12CommandList* gCommandList = nullptr; //命令队列COM接口指针  负责记录渲染命令（就是画图用的）
 
-ID3D12Fence* gFence = nullptr; //
-HANDLE gFenceEvent = nullptr;
+ID3D12Fence* gFence = nullptr; //栅栏 计数器 每完成一个CammendList 即+1
+HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 Event，告诉系统：“等 Fence 到某个值的时候，提醒我
 
-UINT64 gFenceValue = 0;
+UINT64 gFenceValue = 0;//计数器 和Fence同步用的
+
+
+
+//Resource Barrier（资源屏障）
+//封装「创建状态屏障切换」的函数
+//在显卡内部，同一块显存（resource）在不同的阶段有不同的用途（state）。
+//一个是用来展示（显示器），一个是用来画画 所以要切换
+D3D12_RESOURCE_BARRIER InitResourceBarrier(ID3D12Resource* inResource, D3D12_RESOURCE_STATES inPrevState, D3D12_RESOURCE_STATES inNextState)   //LYY
+{
+
+
+	D3D12_RESOURCE_BARRIER d3d12ResourceBarrier;
+
+	//把结构体内存清零，避免垃圾值导致配置错误（新手必备，防止未知bug）
+	memset(&d3d12ResourceBarrier, 0, sizeof(d3d12ResourceBarrier));
+
+	//最常用的屏障类型，表示“状态切换
+	d3d12ResourceBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+
+	// 屏障标志：无特殊设置（默认即可，无需额外配置）
+	d3d12ResourceBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+
+	//指定「要切换状态的资源」（比如 gColorRTs 里的交换链纹理）
+	d3d12ResourceBarrier.Transition.pResource = inResource;
+
+
+	//换前的旧状态
+	d3d12ResourceBarrier.Transition.StateBefore = inPrevState;
+
+	//切换后的新状态
+	d3d12ResourceBarrier.Transition.StateAfter = inNextState;
+
+	//指定「要切换的子资源」：所有子资源（新手阶段纹理只有1个子资源，默认即可）
+	d3d12ResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	return d3d12ResourceBarrier;
+
+}
+
+
 
 
 //D3D12初始化函数
@@ -285,6 +329,9 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	gFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr); //这是啥
 
 
+	gCurrentRTIndex = gSwapChain->GetCurrentBackBufferIndex(); //这个函数是交换链的一个方法  用来获取当前要渲染的后台缓冲区索引  也就是你要画到哪个RT上面去画  双缓冲就是0和1交替变化
+															   //即每帧都在变换哦 
+
 
 	return true;
 }
@@ -328,12 +375,38 @@ void EndCommandList()
 	gFenceValue += 1;
 
 	// 2. 让 CommandQueue（快递员）给 Fence（计数器）发信号： 完成之后 设置这批指令的目标编号
-	//意思是 这“篮子”活儿干完了，你再把数字改了
+	//意思是 这“篮子”活儿干完了，你再把数字改了(把fence值设置为fence value)
 	gCommandQueue->Signal(gFence, gFenceValue);
 
 }
 
 
+
+//在显卡内部，同一块内存（Resource）在不同的阶段有不同的用途（State）。
+//PRESENT（呈现状态）：显存块正在被“显示器”读取，用来把画面显示到屏幕上。
+//RENDER_TARGET（渲染目标状态）：显存块正在被“渲染管线”写入，GPU 正在上面画画。
+
+void BeginRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //ID3D12GraphicsCommandList 是ID3D12CommandList的字接口  图形渲染专用子接口（ 如画画 画三角形、设置流水线、清空画布、以及你刚才看到的资源屏障 ResourceBarrier）
+{
+	D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(gColorRTs[gCurrentRTIndex],D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);//从显示切换到准备画画	
+
+
+	//把资源屏障提交到命令列表，告诉 GPU：「立即执行这个资源状态切换」
+	//    第一个参数：屏障数量（这里只有1个，新手阶段都是1个）
+	//    第二个参数：屏障的地址（传入刚才创建的 barrier）
+	inCommandList->ResourceBarrier(1, &barrier); 
+
+}
+
+
+	
+void EndRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //
+{
+	D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(gColorRTs[gCurrentRTIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT); //画完了切换显示
+
+	inCommandList->ResourceBarrier(1, &barrier);
+
+}
 
 
 
@@ -482,6 +555,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		else
 		{
 			//rendering
+			gSwapChain->Present(0, 0);
 
 		}
 
