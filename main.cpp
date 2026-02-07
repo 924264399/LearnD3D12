@@ -367,11 +367,15 @@ void EndCommandList()
 
 	gCommandList->Close(); // 停止记录命令（胶带封箱）  这句必须要的  不然你提交不了命令列表  就像你写完一篇文章不按保存键一样  这时候命令列表就像是「草稿」，还不能让显卡看到。调用 Close() 就是「保存草稿」，让它变成「正式文档」，显卡才能读取和执行里面的指令了。
 
-	
+	ID3D12CommandList* ppCommandListes[] = { gCommandList }; //CommandList 写满指令的「快递单」 
+															 //ppCommandListes 数组 = 装快递单的「快递箱」（哪怕只有 1 张快递单，也要放进箱子里）
 
 
+	gCommandQueue->ExecuteCommandLists(1, ppCommandListes); //PP 的意思是 Pointer to Pointer
+															//这一步就是cpu 往GPU 发送CommandLists   第一个参数代表几个（如果数组里有3个commandlist 就填3）  第二个是CommandList的地址
+															//CommandLists本身就是一揽子指令 为什么还要多个commandlist在打包进list数组呢？  因为这就是可以 它支持一次性提交多个命令列表啊
+															
 
-	//目前还缺少 和  正式提交GPU的步骤
 
 
 	//标记里程碑
@@ -393,11 +397,43 @@ void BeginRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //ID3D12G
 {
 	D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(gColorRTs[gCurrentRTIndex],D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);//从显示切换到准备画画	
 
-
 	//把资源屏障提交到命令列表，告诉 GPU：「立即执行这个资源状态切换」
-	//    第一个参数：屏障数量（这里只有1个，新手阶段都是1个）
-	//    第二个参数：屏障的地址（传入刚才创建的 barrier）
-	inCommandList->ResourceBarrier(1, &barrier); 
+//    第一个参数：屏障数量（这里只有1个，新手阶段都是1个）
+//    第二个参数：屏障的地址（传入刚才创建的 barrier）
+	inCommandList->ResourceBarrier(1, &barrier);
+
+
+	//对RT 和 DSV 获取他们的实际的内存地址
+	D3D12_CPU_DESCRIPTOR_HANDLE colorRT,dsv;  //定义两个CPU描述符句柄（用来定位RT和DSV））
+
+	dsv.ptr = gSwapChainDSVHeap->GetCPUDescriptorHandleForHeapStart().ptr; //GetCPUDescriptorHandleForHeapStart获取的是内存 的句柄（内存的表示） .ptr之后获取到具体的内存地址（指针）  因为我们DSV堆里只有一个DSV 所以直接用起始地址就行了
+	colorRT.ptr = gSwapChainRTVHeap->GetCPUDescriptorHandleForHeapStart().ptr + gCurrentRTIndex * gRTVDescriptorSize; //计算当前RTV的具体位置  因为我们之前把两个RTV放在一起了  所以要根据当前索引（0或1）来计算出当前帧要用哪个RT的地址
+
+
+	//把画板挂到流水线上（输出合并阶段）
+	inCommandList->OMSetRenderTargets(1, &colorRT, FALSE, &dsv); //设置渲染目标（Output Merger 阶段）  
+																//这句的意思是：告诉 GPU，接下来我要开始画画了，画板（Render Target）和深度缓冲（Depth Stencil View）都准备好了，你们把它们挂到「输出合并阶段」的接口上吧！  
+																// 这样 GPU 就知道了，后续的绘制命令要往哪个画板上画，以及深度测试要用哪个深度缓冲了。
+																//1代表直往一个画布上画  DX12支持画8个  即MRT
+																//FALSE 表示这些 RenderTarget 句柄在内存中不是连续存放的（通常单张画图都填 FALSE）。
+
+
+	//设定画笔的作用范围（视口与裁剪）
+	//下面两都是结构体  定义视口和裁剪矩形
+	D3D12_VIEWPORT viewport = {0.0f,0.0f,1280.0f,720.0f};
+
+	D3D12_RECT scissorRect = { 0,0,1280,720 };
+
+	inCommandList->RSSetViewports(1, &viewport); //设置视口  视口是个矩形区域 定义了最终画面在屏幕上的位置和大小  这里设置成全屏
+	inCommandList->RSSetScissorRects(1, &scissorRect); //设置裁剪矩形  定义了哪些像素可以被渲染到屏幕上  这里设置成和视口一样大  也就是不裁剪
+
+
+
+	const float clearColor[] = { 0.1f,0.4f,0.6f,1.0f }; //清屏颜色 RGBA
+
+	inCommandList->ClearRenderTargetView(colorRT, clearColor, 0, nullptr); //清空当前RTV对应的资源（画布）  用上面定义的颜色来清空  这里是全屏清空 因为裁剪矩形和视口一样大
+	inCommandList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr); //清空DSV对应的资源（深度缓冲）  这里是全屏清空 因为裁剪矩形和视口一样大
+
 
 }
 
@@ -560,15 +596,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			//rendering
 
-			WaitForCompletionOfCommandList();//CPU 和 GPU同步
+			WaitForCompletionOfCommandList();//CPU 和 GPU同步   CPU 先等 GPU 干完上一帧的所有活，再开始新一帧的渲染  所以放在最开始
 
-			gCommandAllocator->Reset();  //这个reset的作用是？ 以及为什么使用命令分配器的方法？
+			gCommandAllocator->Reset();  //这个reset的作用是？ 清空内存   以及为什么使用命令分配器的方法？因为命令分配器是负责内存的 
 
 			gCommandList->Reset(gCommandAllocator, nullptr);
 
 
+		
+			BeginRenderToSwapChain(gCommandList); //画布状态切换 + 擦除画布
+												//把当前要渲染的后台缓冲区（RT）从「显示状态（PRESENT）」切换为「渲染状态（RENDER_TARGET）」；
+												//告诉 GPU：“接下来要往这个 RT 和深度缓冲里画东西”（绑定 RTV / DSV）；
+												//设定「画面显示的区域」（视口 / 裁剪矩形）；
+												//清空上一帧的画面（RT）和深度数据（DSV），准备新的绘制；
+
+			//draw
+
+
+			//End
+
+			EndRenderToSwapChain(gCommandList); //画布状态切换
+
+			EndCommandList(); // commandlist设置停止记录命令  然后正式提交commandlist到gpu（要把commandlist打包到数组 然后用批提交函数ExecuteCommandLists）  然后gFenceValue加1
+
 			
-			gSwapChain->Present(0, 0);
+			gSwapChain->Present(0, 0);   //切换！后变前！（把渲染好的后台缓冲区切换为前台缓冲区，显示到屏幕上）  第一个参数 0 (SyncInterval)：垂直同步开关。
 
 		}
 
