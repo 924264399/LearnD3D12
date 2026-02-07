@@ -29,7 +29,7 @@ UINT gDSVDescriptorSize = 0; //描述符大小
 
 
 ID3D12CommandAllocator* gCommandAllocator = nullptr; //命令分配器COM接口指针  负责显存的分配和管理（就是给命令列表分配内存用的）
-ID3D12CommandList* gCommandList = nullptr; //命令队列COM接口指针  负责记录渲染命令（就是画图用的）
+ID3D12GraphicsCommandList* gCommandList = nullptr; //命令队列COM接口指针  负责记录渲染命令（就是画图用的）
 
 ID3D12Fence* gFence = nullptr; //栅栏 计数器 每完成一个CammendList 即+1
 HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 Event，告诉系统：“等 Fence 到某个值的时候，提醒我
@@ -364,11 +364,14 @@ void WaitForCompletionOfCommandList()
 
 void EndCommandList()
 {
-	//CommanList
+
+	gCommandList->Close(); // 停止记录命令（胶带封箱）  这句必须要的  不然你提交不了命令列表  就像你写完一篇文章不按保存键一样  这时候命令列表就像是「草稿」，还不能让显卡看到。调用 Close() 就是「保存草稿」，让它变成「正式文档」，显卡才能读取和执行里面的指令了。
+
+	
 
 
 
-	//目前还缺少停止记录命令（胶带封箱） 和  正式提交GPU的步骤
+	//目前还缺少 和  正式提交GPU的步骤
 
 
 	//标记里程碑
@@ -554,7 +557,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 		else
 		{
+
 			//rendering
+
+			WaitForCompletionOfCommandList();//CPU 和 GPU同步
+
+			gCommandAllocator->Reset();  //这个reset的作用是？ 以及为什么使用命令分配器的方法？
+
+			gCommandList->Reset(gCommandAllocator, nullptr);
+
+
+			
 			gSwapChain->Present(0, 0);
 
 		}
