@@ -572,6 +572,34 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 
 	InitD3D12(hwnd, viewportWidth, viewportHeight); //初始化D3D12
+
+
+
+
+	//他这个顶点的数据直接写在了dx12那边了啊 但是现实中是导入模型的啊。。。
+	float vertexData[] = {
+
+		//第一个点的数据        
+		-0.5f, -0.5f, 0.0f, 1.0f, //positiion
+		 1.0f, 0.0f, 0.0f, 1.0f, // 红色
+		 0.0f,  0.0f, 0.0f, 0.0f,  //normal
+
+		 //第二个点的数据
+		  0.0f,  0.5f, 0.5f, 1.0f, //positiion
+		  0.0f, 1.0f, 0.0f, 1.0f, // 绿色
+		  0.0f,  0.0f, 0.0f, 0.0f,  //normal
+
+		  //第三个点的数据
+		  0.5f, -0.5f, 0.5f, 1.0f, //positiion
+		  0.0f, 0.0f, 1.0f, 1.0f, // 蓝色
+		  0.0f,  0.0f, 0.0f, 0.0f,  //normal                 
+	};
+
+
+
+
+
+
 	ShowWindow(hwnd, inShowCmd);
 	UpdateWindow(hwnd);
 
