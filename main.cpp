@@ -37,6 +37,100 @@ HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 
 UINT64 gFenceValue = 0;//计数器 和Fence同步用的
 
 
+///PSO
+ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature,D3D12_SHADER_BYTECODE inVertexShader, D3D12_SHADER_BYTECODE inPixelShader)
+{
+
+	//D3D12_INPUT_ELEMENT_DESC 这个结构体的成员分别是：语义名称（POSITION）、语义索引（0）、数据格式（DXGI_FORMAT_R32G32B32_FLOAT）、输入槽（0）、对齐偏移量（因为是连续内存 cpu需要知道从哪里开始）、输入数据分类（D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA，表示每个顶点都有独立的数据）、实例数据步长率（0，表示不使用实例数据）。  
+	// 这个结构体数组定义了顶点数据的布局，告诉 GPU 每个顶点的数据由哪些部分组成，以及它们在内存中的排列方式。
+	// 要打包为数组哈 每个成员都是一个D3D12_INPUT_ELEMENT_DESC结构体
+	D3D12_INPUT_ELEMENT_DESC vertexDataElementDesc[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }, //DXGI_FORMAT_R32G32B32A32_FLOAT就是float4  rgba嘛
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 4, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},  //texcoor 和 0的参数合在一起就是TEXCOORD0
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+	};
+
+
+	D3D12_INPUT_LAYOUT_DESC vertexDataLayoutDesc = {};
+	vertexDataLayoutDesc.NumElements = 3; // 为什么是3？ 因为我们定义了3个元素：POSITION、TEXCOORD、NORMAL
+	vertexDataLayoutDesc.pInputElementDescs = vertexDataElementDesc; //输入布局描述结构体  
+
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC posDesc = {};
+	posDesc.pRootSignature = inD3D12RootSignature; //根签名
+	posDesc.VS = inVertexShader; //顶点着色器
+	posDesc.PS = inPixelShader; //像素着色器
+	posDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM; //RT格式  这个要和交换链的格式一致
+	posDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT; //DS格式  这个要和你创建depth buffer的格式一致
+	posDesc.SampleDesc.Count = 1; //MSAA数量  这个要和交换链的设置一致
+	posDesc.SampleDesc.Quality = 0; //MSAA质量  这个要和交换链的设置一致
+	posDesc.SampleMask = 0xffffffff; //采样掩码  32位？
+
+	posDesc.InputLayout = vertexDataLayoutDesc; //输入布局描述结构体
+	posDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; //图元类型  这个是三角形列表  还有线段列表 线段带 三角形扇等等
+
+	posDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID; //光栅化状态  填充模式  实心填充  还有线框模式 这个里是实心
+	posDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK; //剔除模式  剔除背面  还有正面剔除 和 不剔除
+
+	//下面几个默认都是FALSE 其实都可以不写的 这里为了展示写出来
+	posDesc.RasterizerState.FrontCounterClockwise = FALSE; //顺时针为正面  这个要和你的顶点数据的定义保持一致  因为你定义的顶点数据是按照顺时针还是逆时针排列的  如果不一致 可能会导致你模型的某些面被错误地剔除掉
+	posDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS; //深度偏移  这里D3D12_DEFAULT_DEPTH_BIAS就是FALSE
+	posDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP; //深度偏移夹紧  这里D3D12_DEFAULT_DEPTH_BIAS_CLAMP就是FALSE
+	posDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS; //斜率缩放深度偏移  这里D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS就是FALSE
+	posDesc.RasterizerState.MultisampleEnable = FALSE; //多重采样启用  这里是FALSE  因为我们没有开启MSAA
+	posDesc.RasterizerState.AntialiasedLineEnable = FALSE; //抗锯齿线启用  这里是FALSE  因为我们没有画线段
+	posDesc.RasterizerState.ForcedSampleCount = 0; //强制采样数量  这里是0  表示不强制
+	posDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF; //保守光栅化  这里是关闭的  因为我们不需要这个功能
+
+
+	posDesc.RasterizerState.DepthClipEnable = TRUE; //启用深度裁剪  这个一般都要启用  否则可能会导致一些深度问题
+
+
+	posDesc.DepthStencilState.DepthEnable = TRUE; //启用深度测试  这个一般都要启用  否则你的3D场景会乱套
+	posDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL; //深度写入掩码  写入所有深度值	
+	posDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL; //深度比较函数  小于等于 即近的覆盖远的
+
+	D3D12_RENDER_TARGET_BLEND_DESC rtBlendDesc = {}; //默认渲染目标混合描述结构体
+	rtBlendDesc.BlendEnable = FALSE; //混合启用  这里是FALSE  表示不启用混合
+	rtBlendDesc.LogicOpEnable = FALSE; //逻辑操作启用  这里是FALSE  表示不启用逻辑操作
+	rtBlendDesc.SrcBlend = D3D12_BLEND_ONE; //源混合因子  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.DestBlend = D3D12_BLEND_ZERO; //目标混合因子  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.BlendOp = D3D12_BLEND_OP_ADD; //混合操作  这里是一个默认值  因为我们没有启用混合
+
+	rtBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE; //源混合因子（Alpha）  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.DestBlendAlpha = D3D12_BLEND_ZERO; //目标混合因子（Alpha）  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD; //混合操作（Alpha）  这里是一个默认值  因为我们没有启用混合
+
+	rtBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP; //逻辑操作  这里是一个默认值  因为我们没有启用逻辑操作
+	rtBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL; //渲染目标写入掩码  写入所有颜色分量
+
+	for(int i = 0;i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;++i)
+	{
+		posDesc.BlendState.RenderTarget[i] = rtBlendDesc; //把上面定义的混合描述结构体，赋值给管线状态描述结构体里每个渲染目标的混合状态
+														  //当然实际上是可以每个都不一样的哈
+	}
+
+	posDesc.NumRenderTargets = 1;//渲染目标数量  这里是1  因为我们交换链的格式里只有一个RT  如果你交换链里有多个RT 这里就要改成对应的数量
+
+	ID3D12PipelineState* D3D12PSO = nullptr; //管线状态对象指针
+
+	HRESULT hResult = gD3D12Device->CreateGraphicsPipelineState(&posDesc, IID_PPV_ARGS(&D3D12PSO)); //创建管线状态对象  通过设备（逻辑显卡）调用 CreateGraphicsPipelineState 方法，传入管线状态描述结构体的地址，以及一个二级指针来接收创建成功后的管线状态对象地址。
+
+	if (FAILED(hResult)) //如果创建失败
+	{
+		return nullptr; //返回空指针
+	}
+	
+	return D3D12PSO; //返回管线状态对象指针
+	
+}
+
+
+
+
+
+
 
 //Resource Barrier（资源屏障）
 //封装「创建状态屏障切换」的函数
