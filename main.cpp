@@ -37,6 +37,160 @@ HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 
 UINT64 gFenceValue = 0;//计数器 和Fence同步用的
 
 
+
+///用来创建VBO 即 vertex buffer object的函数 
+ID3D12Resource* CreateBufferObject(ID3D12GraphicsCommandList* inCommandList, void* inData, int inDataLen, D3D12_RESOURCE_STATES inFinalResourceState)
+{
+
+	D3D12_HEAP_PROPERTIES d3dHeapProperties = {}; //堆属性结构体  你要申请显存 得告诉显卡这个读写的具体位置
+												//包括了默认堆  上传堆 回读堆 三种 D3D12_HEAP_TYPE_DEFAULT  和 D3D12_HEAP_TYPE_UPLOAD 和D3D12_HEAP_TYPE_READBACK
+												//权限分别是GPU专属读写   CPU读GPU写   GPU写CPU读
+
+	d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT; //默认堆 GPU
+
+
+
+	////为什么要设置这个结构体？ 似乎在创建交换链的RT的时候 也用了这个结构体？  因为不管是创建什么资源 都要告诉显卡这个资源的读写权限和位置  这是显卡管理内存的基本要求  就好比你要在电脑里创建一个文件  你得告诉系统这个文件是放在C盘还是D盘  是文本文件还是二进制文件  是只读的还是可读写的  否则系统就不知道怎么帮你管理这个文件了
+	D3D12_RESOURCE_DESC d3d12ResourceDesc = {}; //资源描述符结构体  这个结构体的成员非常多  你要创建什么样的资源 就要把对应的成员设置好  比如你要创建一个纹理  那么就要设置成Texture2D  如果是Buffer 就设置成Buffer  还有一些公共成员也要设置好 比如宽高深度这些
+	d3d12ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; //是Buffer
+	d3d12ResourceDesc.Alignment = 0;
+	d3d12ResourceDesc.Width = inDataLen;
+	d3d12ResourceDesc.Height = 1;
+	d3d12ResourceDesc.DepthOrArraySize = 1; //1张贴图 如果是cubemap 给6（因为cubemap 本质是一个array）
+	d3d12ResourceDesc.MipLevels = 1; //需要多少层级的mip？ 
+	d3d12ResourceDesc.Format = DXGI_FORMAT_UNKNOWN;  //Buffer资源的格式是未知的  因为Buffer资源不是用来当纹理采样的  也不是用来当RT的  所以不需要格式  但是Texture资源就需要格式了 因为它要当纹理采样或者当RT用
+	d3d12ResourceDesc.SampleDesc.Count = 1; //没有MSAA这些
+	d3d12ResourceDesc.SampleDesc.Quality = 0;  //关闭MSAA的化 这里必须是0  只有开启了MSAA才有意义 
+	d3d12ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;  //就是创建出来用来干啥的  对于 Buffer（缓冲区）来说，数据就是一维的线，所以必须是这个格式
+	d3d12ResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE; //表示这块内存没有特殊用途 vbo就没有特殊用途  
+
+	ID3D12Resource* bufferObject = nullptr;
+
+	///emmm 就是用这个函数创建vbo 然后你会发现这在创建交换链的RT的时候 也用了这个函数？  因为本质上VBO和RT和Buffer都是一样？ 都是内存内划一块地？
+	//这里申请的内存可是不能写的默认堆  所以后面的流程是需要中转的
+	gD3D12Device->CreateCommittedResource(
+		&d3dHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&d3d12ResourceDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST, //表示初始化出来就可以被当做拷贝的目标(接受数据的状态 )
+		nullptr, //优化相关的结构体  目前不需要
+		IID_PPV_ARGS(&bufferObject) //资源接口指针二级地址  创建成功后资源的地址会写到这个指针里
+
+
+	);
+
+
+	d3d12ResourceDesc = bufferObject->GetDesc(); //获取资源描述符  前面不是都写了？为什么又获取？
+												 //这里调用 GetDesc()，是为了拿到系统最终确认的、最准确的资源描述，确保后面的计算不会出错。
+
+
+	//声明一堆 “接收器” 变量
+	UINT64 memorySizeUsed = 0; // 用来存：这个资源总共占多少内存
+	UINT64 rowSizeInBytes = 0; //用来存：每一行实际的数据大小（不含对齐
+	UINT rowUsed = 0;  //用来存：这个资源有多少行
+
+	//最重要的一个结构体：用来存“子资源在内存里的具体布局” 这个结构体的成员包括了这个资源在内存中的占用情况  包括了内存大小 行大小 行数等信息
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT subresourceFootprint; 
+
+
+
+	//gD3D12Device->GetCopyableFootprints(
+	//	&d3d12ResourceDesc,  // [输入] 要算哪个资源的布局？
+	//	0,                    // [输入] 从第几个子资源开始算？
+	//	1,                    // [输入] 算几个子资源？
+	//	0,                    // [输入] 如果放在大堆里，偏移量是多少？
+	//	&subresourceFootprint,// [输出] 算出的具体布局信息放这
+	//	&rowUsed,             // [输出] 算出有多少行放这
+	//	&rowSizeInBytes,      // [输出] 算出每行数据大小放这
+	//	&memorySizeUsed       // [输出] 算出总内存大小放这
+	//);
+
+
+
+	//调用 GetCopyableFootprints 计算布局
+	gD3D12Device->GetCopyableFootprints(
+		&d3d12ResourceDesc, //算这个资源
+		0, //第一个子资源索引  这里是0  因为我们只有1个子资源
+		1, //子资源数量  这里是1  因为我们只有1个子资源
+		0, //内存偏移量  这里是0  表示从内存的起始位置开始计算
+		&subresourceFootprint, 
+		&rowUsed,				//行数  对于 Buffer：通常是 1（因为 Buffer 是线性的，一行就存完了）。   Texture：通常是height。
+		&rowSizeInBytes,         //对于 Buffer：等于 Width（就是你实际的数据大小，不含 padding）
+		&memorySizeUsed			//对于 Buffer：等于 rowSizeInBytes（因为只有一行）。 Texture：等于 rowSizeInBytes * height（因为有多行）。
+	);
+
+
+
+	//开始申请临时缓冲区  这个是中转站 所以要cpu写  Gpu读
+
+	ID3D12Resource* tempBufferObject = nullptr;
+
+	 d3dHeapProperties = {}; //堆属性结构体  
+	d3dHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; //这个是cpu写  Gpu读
+
+	gD3D12Device->CreateCommittedResource(
+		&d3dHeapProperties,		//上传堆
+		D3D12_HEAP_FLAG_NONE,
+		&d3d12ResourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,  //[4] 初始状态：通用读
+		nullptr, 
+		IID_PPV_ARGS(&tempBufferObject) 
+
+
+	);
+
+
+
+	//好了  接下来就是  CPU 把数据搬进中转站（也就是 Map -> memcpy -> Unmap 的过程）
+
+	BYTE* pData;
+	tempBufferObject->Map(0, nullptr, reinterpret_cast<void**>(&pData)); //cpu 通过这个函数获取了 GPU某个资源内存块的地址
+																		//这里是0表示第一个子资源  nullptr表示整个资源都映射了  reinterpret_cast<void**>(&pData)是把pData的地址转换成void**类型的地址  因为Map函数需要一个void**类型的参数来接收映射后的地址
+																		//reinterpret_cast<void**>是C++的一个类型转换操作符，用于在不同类型之间进行强制转换。
+																		// 在这里，它将pData的地址（BYTE*类型）转换为void**类型，以满足Map函数的参数要求（要求第三个参数是指向无类型指针的指针）
+
+
+	//对齐   “找好起点，然后一层一层把数据‘码’进 GPU 的内存里
+	BYTE* pDstTempBuffer = reinterpret_cast<BYTE*>(pData + subresourceFootprint.Offset); //pData是GPU内存的起始地址  subresourceFootprint.Offset是这个资源在GPU内存中的偏移量 
+	                                                                                  //pDstTempBuffer临时仓库的实际地址了（也就是我们要把数据搬到的临时buffer的地址）
+
+	const BYTE* pSrcData = reinterpret_cast<BYTE*>(inData); //准备好 “货源起点”  这个是CPU内存里数据的起始地址  也就是我们要搬运的数据的来源地址（输入的顶点数据）
+
+
+	//搬运  memcpy(目标地址, 源地址, 拷贝多少字节)
+	for (UINT i = 0; i < rowUsed; i++) {
+		memcpy(pDstTempBuffer + subresourceFootprint.Footprint.RowPitch * i, pSrcData + rowSizeInBytes * i, rowSizeInBytes);
+	}
+
+	//Unmap函数关闭cpu的权限    CPU 就不能再通过 pData 乱改这块内存了（避免和 GPU 抢着用导致冲突）
+	tempBufferObject->Unmap(0, nullptr);
+
+	//GPU内部拷贝  通过命令列表把中转站的内容搬到真正的vbo里  这个过程是GPU内部完成的  不会占用CPU资源
+	//inCommandList->CopyBufferRegion(
+	//	bufferObject,           // [1] 目标：最终仓库（默认堆的 VBO）
+	//	0,                      // [2] 目标偏移：从最终仓库的第 0 个字节开始放
+	//	tempBufferObject,       // [3] 源：临时中转站（上传堆）
+	//	0,                      // [4] 源偏移：从中转站的第 0 个字节开始取
+	//	subresourceFootprint.Footprint.Width // [5] 拷贝大小：整个资源的宽度
+	//);
+
+	inCommandList->CopyBufferRegion(bufferObject, 0, tempBufferObject, 0, subresourceFootprint.Footprint.Width);
+
+
+	//准备一个“状态转换”的指令  把bufferObject 从D3D12_RESOURCE_STATE_COPY_DEST 转化到  最终的状态（需要输入）
+	//真相：GPU 搬运的时候，bufferObject 的身份是“搬运目的地（COPY_DEST）”。
+	//切换：搬完后，你得告诉 GPU：“现在把它变成‘顶点缓冲区（VERTEX_BUFFER）’”。
+
+	D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(bufferObject, D3D12_RESOURCE_STATE_COPY_DEST, inFinalResourceState);
+
+	inCommandList->ResourceBarrier(1, &barrier); //：强制 GPU 在切换身份前完成所有未完成的工作，并清空相关的缓存（Cache）。
+	return bufferObject;
+	
+
+
+}
+
+
 ///PSO
 ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature,D3D12_SHADER_BYTECODE inVertexShader, D3D12_SHADER_BYTECODE inPixelShader)
 {
@@ -304,18 +458,18 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	//d3dHeapProperties.CreationNodeMask = 0;   //你在哪个显卡上创建这个内存 这里比较麻烦 就是对于多显卡的电脑
 	//d3dHeapProperties.VisibleNodeMask = 0;   //这里都是写0  是指向我自己电脑的第0号GPU  但是实际项目不是这么写的 要指向实际GPU的index的
 
-	D3D12_RESOURCE_DESC d1312ResourceDesc = {}; //资源描述符结构体
-	d1312ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
-	d1312ResourceDesc.Alignment = 0;
-	d1312ResourceDesc.Width = inWidth;
-	d1312ResourceDesc.Height = inHeight;
-	d1312ResourceDesc.DepthOrArraySize = 1; //1张贴图 如果是cubemap 给6（因为cubemap 本质是一个array）
-	d1312ResourceDesc.MipLevels = 0; //不要mip 
-	d1312ResourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;  //这就是D24格式 记得吗  24位存深度（Depth），8位存模板（Stencil）
-	d1312ResourceDesc.SampleDesc.Count = 1; //没有MSAA这些
-	d1312ResourceDesc.SampleDesc.Quality = 0;  //关闭MSAA的化 这里必须是0  只有开启了MSAA才有意义 
-	d1312ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  //就是创建出来用来干啥的  有纹理采样  有用来当RT的  目前先设置为UKNOWN 
-	d1312ResourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL; //这是啥子？
+	D3D12_RESOURCE_DESC d3d12ResourceDesc = {}; //资源描述符结构体
+	d3d12ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
+	d3d12ResourceDesc.Alignment = 0;
+	d3d12ResourceDesc.Width = inWidth;
+	d3d12ResourceDesc.Height = inHeight;
+	d3d12ResourceDesc.DepthOrArraySize = 1; //1张贴图 如果是cubemap 给6（因为cubemap 本质是一个array）
+	d3d12ResourceDesc.MipLevels = 1; //需要多少层级的mip？ 
+	d3d12ResourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;  //这就是D24格式 记得吗  24位存深度（Depth），8位存模板（Stencil）
+	d3d12ResourceDesc.SampleDesc.Count = 1; //没有MSAA这些
+	d3d12ResourceDesc.SampleDesc.Quality = 0;  //关闭MSAA的化 这里必须是0  只有开启了MSAA才有意义 
+	d3d12ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  //就是创建出来用来干啥的  有纹理采样  有用来当RT的  目前先设置为UKNOWN 
+	d3d12ResourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL; //这是啥子？
 
 
 	D3D12_CLEAR_VALUE dsClearValue = {}; //预设的扫除值结构体  显卡渲染每一帧前，都要清空深度缓冲  如果你告诉显卡：“我以后每次清空深度图都会用 1.0 这个值”，显卡硬件会针对这个特定值进行电路级优化（叫做 Fast Clear）。如果你后续清空时的值和这里设的不一样，渲染就会变慢。
@@ -326,7 +480,7 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	gD3D12Device->CreateCommittedResource(
 		&d3dHeapProperties,
 		D3D12_HEAP_FLAG_NONE,
-		&d1312ResourceDesc, 
+		&d3d12ResourceDesc,
 		D3D12_RESOURCE_STATE_DEPTH_WRITE, //表示初始化出来就可以被写入深度
 		&dsClearValue,
 		IID_PPV_ARGS(&gDSRT)
