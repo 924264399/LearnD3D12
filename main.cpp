@@ -1,6 +1,9 @@
 #include <windows.h>   // 窗口
 #include <d3d12.h>    // D3D12核心头文件
 #include <dxgi1_4.h>  // DXGI核心头文件
+#include <d3dcompiler.h> // D3D编译器头文件（如果需要编译着色器的话）
+#include <stdio.h> 
+
 
 #pragma comment(lib,"d3d12.lib")  //链接D3D12库文件
 #pragma comment(lib,"dxgi.lib")   //链接DXGI库文件
@@ -35,6 +38,62 @@ ID3D12Fence* gFence = nullptr; //栅栏 计数器 每完成一个CammendList 即+1
 HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 Event，告诉系统：“等 Fence 到某个值的时候，提醒我
 
 UINT64 gFenceValue = 0;//计数器 和Fence同步用的
+
+
+
+//编译shader的函数
+void CreateShaderFromFile(LPCWSTR inShaderFilePath,
+	const char* inMainFunctionName, //主函数名称
+	const char* inTarget,  //这个是版本 比如vs_5_0   ps_5_0  ps_4_0  比如 "vs_5_0" "ps_5_0" 比如5.0是基础班  5.1有DX12 专属增强版（支持更多寄存器、动态资源索引等）
+	D3D12_SHADER_BYTECODE *inShader )
+{
+	ID3DBlob* shaderBuffer = nullptr; //通用的二进制数据容器  接口 
+	ID3DBlob* errorBuffer = nullptr;
+
+	HRESULT hResult = D3DCompileFromFile(
+		inShaderFilePath, //文件路径
+		nullptr, //宏定义  目前不需要
+		D3D_COMPILE_STANDARD_FILE_INCLUDE, //包含文件的处理方式  这个是默认值  表示如果shader里有#include 就去找这个文件
+		inMainFunctionName, //主函数名称  比如 "VSMain" "PSMain"
+		inTarget, //目标版本 
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, //编译选项  
+		0, //编译选项2  目前不需要
+		&shaderBuffer, //编译成功后的shader字节码会写到这个指针里
+		&errorBuffer //编译失败后的错误信息会写到这个指针里
+
+	);
+
+	if (FAILED(hResult))
+	{
+		printf("CreateShaderFromFile Compiler shader error :[%s][%s]:[%s]\n", inMainFunctionName, inTarget,(char*)errorBuffer->GetBufferPointer());//这里获取的地址是什么的地址？
+		errorBuffer->Release();
+		return;
+
+	}
+
+
+	inShader->pShaderBytecode = shaderBuffer->GetBufferPointer(); //把编译成功的shader字节码地址，写到 D3D12_SHADER_BYTECODE结构体   的pShaderBytecode里  
+	inShader->BytecodeLength = shaderBuffer->GetBufferSize(); //把编译成功的shader字节码大小，写到 D3D12_SHADER_BYTECODE结构体  BytecodeLength里
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
