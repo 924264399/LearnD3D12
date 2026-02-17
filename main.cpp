@@ -41,7 +41,35 @@ UINT64 gFenceValue = 0;//计数器 和Fence同步用的
 
 
 
-//编译shader的函数
+
+///初始化rootsignature的函数
+ID3D12RootSignature* InitRootSignature()
+{
+	//根签名描述结构体 核心
+	D3D12_ROOT_SIGNATURE_DESC rootSignatureDese = {};  //根签名描述结构体  这个结构体的成员非常多  
+	rootSignatureDese.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT; //允许我们使用顶点缓冲区（VBO）和输入布局（Input Layout） 如果不设置这个 默认是关闭的 vs就用不了
+
+
+	//序列化根签名（“把清单写成通用文档格式”）
+	//要用这个函数获取 序列化后的二进制数据（Blob） 即signature
+	ID3DBlob* signature;
+	HRESULT hResult = D3D12SerializeRootSignature(&rootSignatureDese, D3D_ROOT_SIGNATURE_VERSION_1,&signature,nullptr);
+
+
+	//创建真正的根签名对象（“把清单交给 GPU 备案”）
+	ID3D12RootSignature* d3d12RootSignature;
+	gD3D12Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&d3d12RootSignature));
+
+	return d3d12RootSignature;
+
+
+}
+
+
+
+
+
+///编译shader的函数
 void CreateShaderFromFile(LPCWSTR inShaderFilePath,
 	const char* inMainFunctionName, //主函数名称
 	const char* inTarget,  //这个是版本 比如vs_5_0   ps_5_0  ps_4_0  比如 "vs_5_0" "ps_5_0" 比如5.0是基础班  5.1有DX12 专属增强版（支持更多寄存器、动态资源索引等）
