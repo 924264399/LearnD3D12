@@ -7,6 +7,8 @@
 
 #pragma comment(lib,"d3d12.lib")  //链接D3D12库文件
 #pragma comment(lib,"dxgi.lib")   //链接DXGI库文件
+#pragma comment(lib,"d3dcompiler.lib")  //链接D3D编译器库文件
+
 
 
 
@@ -38,6 +40,49 @@ ID3D12Fence* gFence = nullptr; //栅栏 计数器 每完成一个CammendList 即+1
 HANDLE gFenceEvent = nullptr;//这是闹钟 cpu 等待GPU完成工作时用的  它会创建一个 Event，告诉系统：“等 Fence 到某个值的时候，提醒我
 
 UINT64 gFenceValue = 0;//计数器 和Fence同步用的
+
+
+
+
+//Resource Barrier（资源屏障）
+//封装「创建状态屏障切换」的函数
+//在显卡内部，同一块显存（resource）在不同的阶段有不同的用途（state）。
+//一个是用来展示（显示器），一个是用来画画 所以要切换
+D3D12_RESOURCE_BARRIER InitResourceBarrier(ID3D12Resource* inResource, D3D12_RESOURCE_STATES inPrevState, D3D12_RESOURCE_STATES inNextState)   //LYY
+{
+
+
+	D3D12_RESOURCE_BARRIER d3d12ResourceBarrier;
+
+	//把结构体内存清零，避免垃圾值导致配置错误（新手必备，防止未知bug）
+	memset(&d3d12ResourceBarrier, 0, sizeof(d3d12ResourceBarrier));
+
+	//最常用的屏障类型，表示“状态切换
+	d3d12ResourceBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+
+	// 屏障标志：无特殊设置（默认即可，无需额外配置）
+	d3d12ResourceBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+
+	//指定「要切换状态的资源」（比如 gColorRTs 里的交换链纹理）
+	d3d12ResourceBarrier.Transition.pResource = inResource;
+
+
+	//换前的旧状态
+	d3d12ResourceBarrier.Transition.StateBefore = inPrevState;
+
+	//切换后的新状态
+	d3d12ResourceBarrier.Transition.StateAfter = inNextState;
+
+	//指定「要切换的子资源」：所有子资源（新手阶段纹理只有1个子资源，默认即可）
+	d3d12ResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	return d3d12ResourceBarrier;
+
+}
+
+
+
 
 
 
@@ -373,42 +418,6 @@ ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature,D3D12_S
 
 
 
-//Resource Barrier（资源屏障）
-//封装「创建状态屏障切换」的函数
-//在显卡内部，同一块显存（resource）在不同的阶段有不同的用途（state）。
-//一个是用来展示（显示器），一个是用来画画 所以要切换
-D3D12_RESOURCE_BARRIER InitResourceBarrier(ID3D12Resource* inResource, D3D12_RESOURCE_STATES inPrevState, D3D12_RESOURCE_STATES inNextState)   //LYY
-{
-
-
-	D3D12_RESOURCE_BARRIER d3d12ResourceBarrier;
-
-	//把结构体内存清零，避免垃圾值导致配置错误（新手必备，防止未知bug）
-	memset(&d3d12ResourceBarrier, 0, sizeof(d3d12ResourceBarrier));
-
-	//最常用的屏障类型，表示“状态切换
-	d3d12ResourceBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-
-	// 屏障标志：无特殊设置（默认即可，无需额外配置）
-	d3d12ResourceBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-
-	//指定「要切换状态的资源」（比如 gColorRTs 里的交换链纹理）
-	d3d12ResourceBarrier.Transition.pResource = inResource;
-
-
-	//换前的旧状态
-	d3d12ResourceBarrier.Transition.StateBefore = inPrevState;
-
-	//切换后的新状态
-	d3d12ResourceBarrier.Transition.StateAfter = inNextState;
-
-	//指定「要切换的子资源」：所有子资源（新手阶段纹理只有1个子资源，默认即可）
-	d3d12ResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	return d3d12ResourceBarrier;
-
-}
 
 
 
@@ -664,8 +673,7 @@ bool InitD3D12(HWND inhwnd,int inWidth,int inHeight)
 	gFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr); //这是啥
 
 
-	gCurrentRTIndex = gSwapChain->GetCurrentBackBufferIndex(); //这个函数是交换链的一个方法  用来获取当前要渲染的后台缓冲区索引  也就是你要画到哪个RT上面去画  双缓冲就是0和1交替变化
-															   //即每帧都在变换哦 
+	
 
 
 	return true;
@@ -730,6 +738,9 @@ void EndCommandList()
 
 void BeginRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //ID3D12GraphicsCommandList 是ID3D12CommandList的字接口  图形渲染专用子接口（ 如画画 画三角形、设置流水线、清空画布、以及你刚才看到的资源屏障 ResourceBarrier）
 {
+	gCurrentRTIndex = gSwapChain->GetCurrentBackBufferIndex(); //这个函数是交换链的一个方法  用来获取当前要渲染的后台缓冲区索引  也就是你要画到哪个RT上面去画  双缓冲就是0和1交替变化
+	//即每帧都在变换哦 
+
 	D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(gColorRTs[gCurrentRTIndex],D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);//从显示切换到准备画画	
 
 	//把资源屏障提交到命令列表，告诉 GPU：「立即执行这个资源状态切换」
@@ -906,6 +917,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	//////////////////////////////////////////////////////////////////////----------show 显示------------////////////////////////////////////////////////////////////////////////////////
 
 
+	///下面这部分是  游戏 / 程序启动时的一次性资源准备（进入主循环之前）
+
+
 	InitD3D12(hwnd, viewportWidth, viewportHeight); //初始化D3D12
 
 
@@ -930,15 +944,34 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		  0.0f,  0.0f, 0.0f, 0.0f,  //normal                 
 	};
 
+	//gCommandAllocator->Reset();  //清空内存   以及为什么使用命令分配器的方法？因为命令分配器是负责内存的 
+	gCommandList->Reset(gCommandAllocator, nullptr);
+	ID3D12Resource* vbo = CreateBufferObject(gCommandList, vertexData, sizeof(vertexData), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	ID3D12RootSignature* rootSignature = InitRootSignature();
 
+	D3D12_SHADER_BYTECODE vs, ps;
+	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainVS", "vs_5_0", &vs);   //开始编译
+	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainPS", "ps_5_0", &ps);
 
+	ID3D12PipelineState* pso = createPSO(rootSignature, vs, ps);
 
+	EndCommandList();
+	WaitForCompletionOfCommandList();
+
+	D3D12_VERTEX_BUFFER_VIEW vboBufferView = {};   //这是vbo的view 和rtv和dsv的view一样  都是对资源的一个「视图」，用来告诉 GPU 这个资源是什么样子的（格式、大小、结构等），以及怎么访问它
+	                                               //但是形式不一样 因为dx12 对于他们走了两套不同的路线
+	vboBufferView.BufferLocation = vbo->GetGPUVirtualAddress();
+	vboBufferView.SizeInBytes = sizeof(float) * 36;
+	vboBufferView.StrideInBytes = sizeof(float) * 12;
+
+	D3D12_VERTEX_BUFFER_VIEW vbos[] = { vboBufferView };
 
 
 	ShowWindow(hwnd, inShowCmd);
 	UpdateWindow(hwnd);
 
 
+	////////////////////主循环  
 	MSG msg;
 	while (true) {
 
@@ -973,8 +1006,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 												//设定「画面显示的区域」（视口 / 裁剪矩形）；
 												//清空上一帧的画面（RT）和深度数据（DSV），准备新的绘制；
 
+
 			//draw
 
+
+			gCommandList->SetPipelineState(pso); //设置PSO
+
+			gCommandList->SetGraphicsRootSignature(rootSignature);  //设置根签名  
+
+			gCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); //设置图元类型  这里是三角形列表  每三个点组成一个三角形
+
+			gCommandList->IASetVertexBuffers(0,1,vbos); //绑定vbo
+
+			gCommandList->DrawInstanced(3, 1, 0, 0); //正式下达 画图命令 
 
 			//End
 

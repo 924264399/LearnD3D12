@@ -17,7 +17,7 @@ struct VSout{
 
 
 
-VSout VSMain(VertexDate inVertexData){
+VSout MainVS(VertexDate inVertexData){
 
     VSout vo;
 
