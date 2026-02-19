@@ -3,6 +3,7 @@
 #include <dxgi1_4.h>  // DXGI核心头文件
 #include <d3dcompiler.h> // D3D编译器头文件（如果需要编译着色器的话）
 #include <stdio.h> 
+#include "StaticMeshComponent.h"
 
 
 #pragma comment(lib,"d3d12.lib")  //链接D3D12库文件
@@ -334,12 +335,13 @@ ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature,D3D12_S
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }, //DXGI_FORMAT_R32G32B32A32_FLOAT就是float4  rgba嘛
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 4, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},  //texcoor 和 0的参数合在一起就是TEXCOORD0
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "Tangent", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, sizeof(float) * 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
 
 	D3D12_INPUT_LAYOUT_DESC vertexDataLayoutDesc = {};
-	vertexDataLayoutDesc.NumElements = 3; // 为什么是3？ 因为我们定义了3个元素：POSITION、TEXCOORD、NORMAL
+	vertexDataLayoutDesc.NumElements = 4; // 为什么是4？ 因为我们定义了3个元素：POSITION、TEXCOORD、NORMAL 和Tangent
 	vertexDataLayoutDesc.pInputElementDescs = vertexDataElementDesc; //输入布局描述结构体  
 
 
@@ -922,32 +924,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	InitD3D12(hwnd, viewportWidth, viewportHeight); //初始化D3D12
 
+	StaticMeshComponent staticMeshCompenent;
 
 
 
-	//他这个顶点的数据直接写在了dx12那边了啊 但是现实中是导入模型的啊。。。
-	float vertexData[] = {
+	staticMeshCompenent.SetVertexCount(3);//3个点
 
-		//第一个点的数据        
-		-0.5f, -0.5f, 0.0f, 1.0f, //positiion
-		 1.0f, 0.0f, 0.0f, 1.0f, // 红色
-		 0.0f,  0.0f, 0.0f, 0.0f,  //normal
+	//第一个点的position和color
+	staticMeshCompenent.SetVertexPosition(0, -0.5f, -0.5f, 0.0f, 1.0f);
 
-		 //第二个点的数据
-		  0.0f,  0.5f, 0.5f, 1.0f, //positiion
-		  0.0f, 1.0f, 0.0f, 1.0f, // 绿色
-		  0.0f,  0.0f, 0.0f, 0.0f,  //normal
+	staticMeshCompenent.SetVertexTexcoord(0, 1.0f, 0.0f, 0.0f, 1.0f);
 
-		  //第三个点的数据
-		  0.5f, -0.5f, 0.5f, 1.0f, //positiion
-		  0.0f, 0.0f, 1.0f, 1.0f, // 蓝色
-		  0.0f,  0.0f, 0.0f, 0.0f,  //normal                 
-	};
+	//第二个点的
+	staticMeshCompenent.SetVertexPosition(1, 0.0f, 0.5f, 0.5f, 1.0f);
+
+	staticMeshCompenent.SetVertexTexcoord(1, 0.0f, 1.0f, 0.0f, 1.0f);
+
+
+	//第三个点的
+	staticMeshCompenent.SetVertexPosition(2, 0.5f, -0.5f, 0.5f, 1.0f);
+
+	staticMeshCompenent.SetVertexTexcoord(2, 0.0f, 0.0f, 1.0f, 1.0f);
+
+
+
+
 
 	//gCommandAllocator->Reset();  //清空内存   以及为什么使用命令分配器的方法？因为命令分配器是负责内存的 
-	gCommandList->Reset(gCommandAllocator, nullptr);
-	ID3D12Resource* vbo = CreateBufferObject(gCommandList, vertexData, sizeof(vertexData), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	//gCommandList->Reset(gCommandAllocator, nullptr);
+
+
+	staticMeshCompenent.mVBO = CreateBufferObject(gCommandList, staticMeshCompenent.mVertexData, sizeof(StaticMeshComponemtVertexData)* staticMeshCompenent.mVertexCount, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	ID3D12RootSignature* rootSignature = InitRootSignature();
+
+
+	staticMeshCompenent.InitFromFile(gCommandList, "Res/Model/Sphere.staticmesh");//目前没这个
+
 
 	D3D12_SHADER_BYTECODE vs, ps;
 	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainVS", "vs_5_0", &vs);   //开始编译
@@ -958,13 +970,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	EndCommandList();
 	WaitForCompletionOfCommandList();
 
-	D3D12_VERTEX_BUFFER_VIEW vboBufferView = {};   //这是vbo的view 和rtv和dsv的view一样  都是对资源的一个「视图」，用来告诉 GPU 这个资源是什么样子的（格式、大小、结构等），以及怎么访问它
-	                                               //但是形式不一样 因为dx12 对于他们走了两套不同的路线
-	vboBufferView.BufferLocation = vbo->GetGPUVirtualAddress();
-	vboBufferView.SizeInBytes = sizeof(float) * 36;
-	vboBufferView.StrideInBytes = sizeof(float) * 12;
 
-	D3D12_VERTEX_BUFFER_VIEW vbos[] = { vboBufferView };
+	D3D12_VERTEX_BUFFER_VIEW vbos[] = { staticMeshCompenent.mVBOView };
 
 
 	ShowWindow(hwnd, inShowCmd);

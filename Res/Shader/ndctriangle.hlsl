@@ -4,6 +4,7 @@ struct VertexDate{
     float4 texcoord : TEXCOORD0;
 
     float4 normal : NORMAL;
+    float4 tangent : TANGENT;
 };
 
 
