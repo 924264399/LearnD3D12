@@ -91,9 +91,26 @@ D3D12_RESOURCE_BARRIER InitResourceBarrier(ID3D12Resource* inResource, D3D12_RES
 ///初始化rootsignature的函数
 ID3D12RootSignature* InitRootSignature()
 {
+
+	///这个Parameter 给根常量用的
+	D3D12_ROOT_PARAMETER _0Parameter = {};  //这玩意可以是数组哈  这个玩意就对应下面跟签名的第一个参数 SetGraphicsRoot32BitConstants
+	_0Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;  //是给根常量用的 所以是这个TYPE 实际还有cbv  srv ubv啥的
+	_0Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX ; //只在vertex shader 如果都想用 则要改为all
+	_0Parameter.Constants.RegisterSpace = 0; //这是 “寄存器空间”  给复杂引擎用的 会细分很多不同的space  我们简单的填0
+	_0Parameter.Constants.ShaderRegister = 0; //对于shader 那边的 cbuffer 那边的 b0 的 0
+	_0Parameter.Constants.Num32BitValues = 4;//有多少个32位（4字节）的数据？   这个根常量里有 4 个 float（因为 1 个 float = 32 位 = 4字节）
+
+
+
+
 	//根签名描述结构体 核心
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDese = {};  //根签名描述结构体  这个结构体的成员非常多  
+	rootSignatureDese.NumParameters = 1; //目前只有一个
+	rootSignatureDese.pParameters = &_0Parameter;
+
 	rootSignatureDese.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT; //允许我们使用顶点缓冲区（VBO）和输入布局（Input Layout） 如果不设置这个 默认是关闭的 vs就用不了
+
+
 
 
 	//序列化根签名（“把清单写成通用文档格式”）
@@ -978,6 +995,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	UpdateWindow(hwnd);
 
 
+	//临时颜色（美术可调 来自shader）这里先临时
+
+	float color[] = { 0.5f,0.5f,0.5f,1.0f };
+
+
 	////////////////////主循环  
 	MSG msg;
 	while (true) {
@@ -1020,6 +1042,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			gCommandList->SetPipelineState(pso); //设置PSO
 
 			gCommandList->SetGraphicsRootSignature(rootSignature);  //设置根签名  
+
+			gCommandList->SetGraphicsRoot32BitConstants(0, 4, color, 0);//第一个参数对应D3D12_ROOT_PARAMETER 数组的index
 
 			gCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); //设置图元类型  这里是三角形列表  每三个点组成一个三角形
 

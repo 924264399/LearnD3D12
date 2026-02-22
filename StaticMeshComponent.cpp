@@ -5,7 +5,7 @@ void StaticMeshComponent::SetVertexCount(int inVertexCount)
 {
 	mVertexCount = inVertexCount;
 	//申请内存
-	mVertexData = new StaticMeshComponemtVertexData[inVertexCount];//实例化StaticMeshComponemtVertexData结构体
+	mVertexData = new StaticMeshComponemtVertexData[inVertexCount];//实例化StaticMeshComponemtVertexData结构体  并且是连续的inVertexCount 数量的结构体(即结构体数组)
 
 	memset(mVertexData, 0, sizeof(StaticMeshComponemtVertexData) * inVertexCount); //把申请的内存清零  避免垃圾值导致未知bug
 
