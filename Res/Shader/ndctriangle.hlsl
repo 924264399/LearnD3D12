@@ -8,6 +8,16 @@ cbuffer globalConstants:register(b0){
 };
 
 
+cbuffer DefaultVertexCB:register(b1){
+
+    float4x4 ProjectionMatrix; 
+    float4x4 ViewMatrix;
+    float4x4 ModelMatrix;
+    float4x4 IT_ModelMatrix; //模型矩阵的逆转置矩阵 用于法线变换
+    float4x4 ReservedMemory[1024]; //预留内存 以防万一  1024个矩阵 4*4 float 每个float4占16字节 16*4=64字节 每个矩阵占64*4=256字节 1024个矩阵占256*1024=262144字节 256KB的内存空间
+};
+
+
 
 struct VertexDate{
 
@@ -34,7 +44,7 @@ VSout MainVS(VertexDate inVertexData){
 
     VSout vo;
 
-    vo.position = inVertexData.position;  //ou 这个为了掩饰 直接就是ndc空间的坐标了  所以不需要进行mvp矩阵变换
+    vo.position = mul(ProjectionMatrix,inVertexData.position);
     vo.color = inVertexData.texcoord + color;  //???  怎么啥都没 没矩阵变化 颜色也没有
 
     return vo;
