@@ -1059,20 +1059,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	ID3D12Resource* cb = CreateConstantBufferObject(65536);//65536 是1024*64(4*4矩阵)  代表这个常量缓冲区能存放65536/4=16384个float数据  也就是4096个float4数据  也就是4096行根参数表数据（每行一个float4）  这个数量根据项目的需求来定的  
 
-	//下面是mvp矩阵的计算
+	///////下面是mvp矩阵的计算  用的都是
+	
+	// 这里用 DirectXMath 封装好的函数
+	// 1.计算 Projection（投影）矩阵：把 3D 空间投影到 2D 屏幕  参数：FOV 45度，宽高比 1280/720，近裁剪面 0.1，远裁剪面 1000
 	DirectX::XMMATRIX projectionMatrix = DirectX::XMMatrixPerspectiveFovLH((45.0f * 3.151592f) / 180.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+
+	// 2. 计算 View（视图）矩阵：代表相机的位置和朝向  这里暂时设为单位矩阵，意思是相机在原点 (0,0,0)，看向 +Z 方向
 	DirectX::XMMATRIX viewMatrix = DirectX::XMMatrixIdentity();
-	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixTranslation(0.0f,0.0f,2.0f); //左手坐标系  往z的方向统一移动两个单位
 
-	DirectX::XMFLOAT4X4 tempMatrix;
+	//3.计算 Model（模型）矩阵：代表物体在世界空间的位置  这里把所有物体统一往 +Z 方向移动 2 个单位（左手坐标系，+Z 是屏幕往里
+	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixTranslation(0.0f,0.0f,2.0f); 
 
-	float matrices[48];
+	DirectX::XMFLOAT4X4 tempMatrix; //【中间变量】用于存储单个矩阵
+	float matrices[48]; //最终数组
 
-	DirectX::XMStoreFloat4x4(&tempMatrix, projectionMatrix);
-	memcpy(matrices, &tempMatrix, sizeof(float) * 16);
+	///中间这里转一遍  是因为XMMATRIX这个类型有奇葩的需求（对齐啥的  所以相对麻烦点 要XMMATRIX → XMFLOAT4X4 → float[] ）
+	DirectX::XMStoreFloat4x4(&tempMatrix, projectionMatrix); //把 Proj 矩阵存到 tempMatrix
+	memcpy(matrices, &tempMatrix, sizeof(float) * 16);  //再 memcpy 到大数组的前 16 个 float  memcpy(目标地址, 源地址, 拷贝多少字节)  数组名本身就是指向第一个元素的指针 所以可以直接用
 
 	DirectX::XMStoreFloat4x4(&tempMatrix, viewMatrix);
-	memcpy(matrices+16, &tempMatrix, sizeof(float) * 16);
+	memcpy(matrices+16, &tempMatrix, sizeof(float) * 16); //下面的就要偏移一下
 
 	DirectX::XMStoreFloat4x4(&tempMatrix, modelMatrix);
 	memcpy(matrices+32, &tempMatrix, sizeof(float) * 16);
