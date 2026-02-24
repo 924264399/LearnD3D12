@@ -2,6 +2,7 @@
 #include <d3d12.h>    // D3D12核心头文件
 #include <dxgi1_4.h>  // DXGI核心头文件
 #include <d3dcompiler.h> // D3D编译器头文件（如果需要编译着色器的话）
+#include <DirectXMath.h> 
 #include <stdio.h> 
 #include "StaticMeshComponent.h"
 
@@ -1022,13 +1023,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	staticMeshCompenent.SetVertexTexcoord(0, 1.0f, 0.0f, 0.0f, 1.0f);
 
 	//第二个点的
-	staticMeshCompenent.SetVertexPosition(1, 0.0f, 0.5f, 0.5f, 1.0f);
+	staticMeshCompenent.SetVertexPosition(1, 0.0f, 0.5f, 0.0f, 1.0f);
 
 	staticMeshCompenent.SetVertexTexcoord(1, 0.0f, 1.0f, 0.0f, 1.0f);
 
 
 	//第三个点的
-	staticMeshCompenent.SetVertexPosition(2, 0.5f, -0.5f, 0.5f, 1.0f);
+	staticMeshCompenent.SetVertexPosition(2, 0.5f, -0.5f, 0.0f, 1.0f);
 
 	staticMeshCompenent.SetVertexTexcoord(2, 0.0f, 0.0f, 1.0f, 1.0f);
 
@@ -1058,19 +1059,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	ID3D12Resource* cb = CreateConstantBufferObject(65536);//65536 是1024*64(4*4矩阵)  代表这个常量缓冲区能存放65536/4=16384个float数据  也就是4096个float4数据  也就是4096行根参数表数据（每行一个float4）  这个数量根据项目的需求来定的  
 
-	//先搞个单位矩阵测试用
-	float matrix[] = {
+	//下面是mvp矩阵的计算
+	DirectX::XMMATRIX projectionMatrix = DirectX::XMMatrixPerspectiveFovLH((45.0f * 3.151592f) / 180.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+	DirectX::XMMATRIX viewMatrix = DirectX::XMMatrixIdentity();
+	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixTranslation(0.0f,0.0f,2.0f); //左手坐标系  往z的方向统一移动两个单位
 
-		1.0f,0.0f,0.0f,0.0f,
-		0.0f,1.0f,0.0f,0.0f,
-		0.0f,0.0f,1.0f,0.0f,
-		0.0f,0.0f,0.0f,1.0f
-	};
+	DirectX::XMFLOAT4X4 tempMatrix;
 
+	float matrices[48];
 
+	DirectX::XMStoreFloat4x4(&tempMatrix, projectionMatrix);
+	memcpy(matrices, &tempMatrix, sizeof(float) * 16);
 
-	
-	UpdateConstantBuffer(cb, matrix, sizeof(float)*16); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去
+	DirectX::XMStoreFloat4x4(&tempMatrix, viewMatrix);
+	memcpy(matrices+16, &tempMatrix, sizeof(float) * 16);
+
+	DirectX::XMStoreFloat4x4(&tempMatrix, modelMatrix);
+	memcpy(matrices+32, &tempMatrix, sizeof(float) * 16);
+
+	UpdateConstantBuffer(cb, matrices, sizeof(float)*48); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去  因为是3个矩阵 所以是16*3=48
 
 
 	EndCommandList();

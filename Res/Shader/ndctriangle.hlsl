@@ -44,7 +44,12 @@ VSout MainVS(VertexDate inVertexData){
 
     VSout vo;
 
-    vo.position = mul(ProjectionMatrix,inVertexData.position);
+    //变换
+    float4 posWS  = mul(ModelMatrix,inVertexData.position);
+    float4 posVS = mul(ViewMatrix,posWS);
+    vo.position = mul(ProjectionMatrix,posVS);
+
+
     vo.color = inVertexData.texcoord + color;  //???  怎么啥都没 没矩阵变化 颜色也没有
 
     return vo;
