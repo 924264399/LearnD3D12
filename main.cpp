@@ -1034,13 +1034,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	staticMeshCompenent.SetVertexTexcoord(2, 0.0f, 0.0f, 1.0f, 1.0f);
 
 
+	//ibo  和  ibo view
+	unsigned int indexes[] = { 0,1,2 };
+	ID3D12Resource*	ibo= CreateBufferObject(gCommandList, indexes,sizeof(unsigned int) * 3, D3D12_RESOURCE_STATE_INDEX_BUFFER); //目前是3个点 所以给3个sizeof(unsigned int) * 3
+
+	D3D12_INDEX_BUFFER_VIEW d3d12IBView;
+
+	d3d12IBView.BufferLocation = ibo->GetGPUVirtualAddress();
+	d3d12IBView.SizeInBytes = sizeof(unsigned int) * 3;
+	d3d12IBView.Format = DXGI_FORMAT_R32_UINT;
 
 
 
-	//gCommandAllocator->Reset();  //清空内存   以及为什么使用命令分配器的方法？因为命令分配器是负责内存的 
-	//gCommandList->Reset(gCommandAllocator, nullptr);
-
-
+	//vbo
 	staticMeshCompenent.mVBO = CreateBufferObject(gCommandList, staticMeshCompenent.mVertexData, sizeof(StaticMeshComponemtVertexData)* staticMeshCompenent.mVertexCount, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	ID3D12RootSignature* rootSignature = InitRootSignature();
 
@@ -1092,6 +1098,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 
 	D3D12_VERTEX_BUFFER_VIEW vbos[] = { staticMeshCompenent.mVBOView };
+
+
 
 
 	ShowWindow(hwnd, inShowCmd);
@@ -1154,7 +1162,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->IASetVertexBuffers(0,1,vbos); //绑定vbo
 
-			gCommandList->DrawInstanced(3, 1, 0, 0); //正式下达 画图命令 
+			gCommandList->IASetIndexBuffer(&d3d12IBView); //绑定IBO
+
+			gCommandList->DrawIndexedInstanced(3, 1, 0, 0, 0); //参数1：每个实例要用到的索引数量   参数2：要绘制的实例数量   参数3：从索引缓冲区的第几个索引开始取  / 参数4：顶点偏移量（索引值要加上这个数才是真正的顶点索引）  // 参数5：从第几个实例开始绘制
+
+			//gCommandList->DrawInstanced(3, 1, 0, 0); //正式下达 画图命令 
 
 			//End
 
