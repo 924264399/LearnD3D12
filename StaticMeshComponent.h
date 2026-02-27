@@ -1,14 +1,32 @@
 #pragma once
 #include <d3d12.h>  
 
+#include <unordered_map>
+#include <string>
 
-struct StaticMeshComponemtVertexData
+
+
+struct StaticMeshComponentVertexData
 {
 	float mPosition[4];
 	float mTexcoord[4];
 	float mNormal[4];
 	float mTangent[4];
 };
+
+
+
+struct SubMesh
+{
+	ID3D12Resource* mIBO;
+	D3D12_INDEX_BUFFER_VIEW mIBView;
+
+
+	int mIndexCount;
+
+
+};
+
 
 
 
@@ -19,9 +37,11 @@ public:
 	ID3D12Resource* mVBO;
 	D3D12_VERTEX_BUFFER_VIEW mVBOView;
 
-	StaticMeshComponemtVertexData* mVertexData; //声明StaticMeshComponemtVertexData的指针 实例化在SetVertexCount函数内
+	StaticMeshComponentVertexData* mVertexData; //声明StaticMeshComponemtVertexData的指针 实例化在SetVertexCount函数内
 
 	int mVertexCount;
+
+	std::unordered_map<std::string, SubMesh*> mSubMeshes;; //使用unordered_map来存储submesh数据 以名字为键 submesh结构体指针为值
 
 
 	// 设置有多少个点

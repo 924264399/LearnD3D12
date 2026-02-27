@@ -1,9 +1,7 @@
 ﻿#include <windows.h>   // 窗口
-#include <d3d12.h>    // D3D12核心头文件
-#include <dxgi1_4.h>  // DXGI核心头文件
-#include <d3dcompiler.h> // D3D编译器头文件（如果需要编译着色器的话）
-#include <DirectXMath.h> 
-#include <stdio.h> 
+
+#include "BattleFireDirect.h"
+
 #include "StaticMeshComponent.h"
 
 
@@ -1011,49 +1009,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	InitD3D12(hwnd, viewportWidth, viewportHeight); //初始化D3D12
 
-	StaticMeshComponent staticMeshCompenent;
+	StaticMeshComponent staticMeshComponent;
+
+	staticMeshComponent.InitFromFile(gCommandList, "Res/Model/Sphere.lhsm");
 
 
+	////CBO 和 IBO的两个的view 已经被封装
+	
 
-	staticMeshCompenent.SetVertexCount(3);//3个点
-
-	//第一个点的position和color
-	staticMeshCompenent.SetVertexPosition(0, -0.5f, -0.5f, 0.0f, 1.0f);
-
-	staticMeshCompenent.SetVertexTexcoord(0, 1.0f, 0.0f, 0.0f, 1.0f);
-
-	//第二个点的
-	staticMeshCompenent.SetVertexPosition(1, 0.0f, 0.5f, 0.0f, 1.0f);
-
-	staticMeshCompenent.SetVertexTexcoord(1, 0.0f, 1.0f, 0.0f, 1.0f);
-
-
-	//第三个点的
-	staticMeshCompenent.SetVertexPosition(2, 0.5f, -0.5f, 0.0f, 1.0f);
-
-	staticMeshCompenent.SetVertexTexcoord(2, 0.0f, 0.0f, 1.0f, 1.0f);
-
-
-	//ibo  和  ibo view
-	unsigned int indexes[] = { 0,1,2 };
-	ID3D12Resource*	ibo= CreateBufferObject(gCommandList, indexes,sizeof(unsigned int) * 3, D3D12_RESOURCE_STATE_INDEX_BUFFER); //目前是3个点 所以给3个sizeof(unsigned int) * 3
-
-	D3D12_INDEX_BUFFER_VIEW d3d12IBView;
-
-	d3d12IBView.BufferLocation = ibo->GetGPUVirtualAddress();
-	d3d12IBView.SizeInBytes = sizeof(unsigned int) * 3;
-	d3d12IBView.Format = DXGI_FORMAT_R32_UINT;
-
-
-
-	//vbo
-	staticMeshCompenent.mVBO = CreateBufferObject(gCommandList, staticMeshCompenent.mVertexData, sizeof(StaticMeshComponemtVertexData)* staticMeshCompenent.mVertexCount, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-	ID3D12RootSignature* rootSignature = InitRootSignature();
-
-
-	staticMeshCompenent.InitFromFile(gCommandList, "Res/Model/Sphere.staticmesh");//目前没这个
-
-
+	ID3D12RootSignature* rootSignature = InitRootSignature(); //初始化根签名
 	D3D12_SHADER_BYTECODE vs, ps;
 	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainVS", "vs_5_0", &vs);   //开始编译
 	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainPS", "ps_5_0", &ps);
@@ -1097,7 +1061,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	WaitForCompletionOfCommandList();
 
 
-	D3D12_VERTEX_BUFFER_VIEW vbos[] = { staticMeshCompenent.mVBOView };
+	D3D12_VERTEX_BUFFER_VIEW vbos[] = { staticMeshComponent.mVBOView };
 
 
 
@@ -1162,9 +1126,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->IASetVertexBuffers(0,1,vbos); //绑定vbo
 
-			gCommandList->IASetIndexBuffer(&d3d12IBView); //绑定IBO
+			
 
-			gCommandList->DrawIndexedInstanced(3, 1, 0, 0, 0); //参数1：每个实例要用到的索引数量   参数2：要绘制的实例数量   参数3：从索引缓冲区的第几个索引开始取  / 参数4：顶点偏移量（索引值要加上这个数才是真正的顶点索引）  // 参数5：从第几个实例开始绘制
+			for (auto iter = staticMeshComponent.mSubMeshes.begin();iter != staticMeshComponent.mSubMeshes.end(); iter++) 
+			{
+				gCommandList->IASetIndexBuffer(&iter->second->mIBView);
+				gCommandList->DrawIndexedInstanced(iter->second->mIndexCount, 1, 0, 0, 0);
+			}
+
 
 			//gCommandList->DrawInstanced(3, 1, 0, 0); //正式下达 画图命令 
 
