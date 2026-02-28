@@ -45,13 +45,12 @@ VSout MainVS(VertexDate inVertexData){
     VSout vo;
 
     //变换
-    float4 posWS  = mul(ModelMatrix,inVertexData.position);
+    float4 posWS  = mul(ModelMatrix,inVertexData.position); // 这样是列矩阵  如果调换位置是行矩阵
     float4 posVS = mul(ViewMatrix,posWS);
     vo.position = mul(ProjectionMatrix,posVS);
 
 
-    vo.color = inVertexData.texcoord + color;  //???  怎么啥都没 没矩阵变化 颜色也没有
-
+    vo.color = float4(inVertexData.normal.xyz,1.0); 
     return vo;
 }
 
@@ -60,5 +59,14 @@ VSout MainVS(VertexDate inVertexData){
 
 float4 MainPS(VSout inPSInput) : SV_TARGET{
 
-    return inPSInput.color;
-}   
+    float3 ambientColor = float3(0.1,0.1,0.1); //环境光颜色
+
+    float3 diffuseColor = float3(0.0,0.0,0.0); 
+
+    float3 specularColor = float3(0.0,0.0,0.0); 
+
+    float3 surfaceColor = ambientColor + diffuseColor + specularColor;  
+
+    return float4(surfaceColor,1.0); 
+
+}
