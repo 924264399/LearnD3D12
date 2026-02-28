@@ -65,7 +65,7 @@ void StaticMeshComponent::InitFromFile(ID3D12GraphicsCommandList* inCommandList,
 	if (err == 0)
 	{
 		int temp = 0;
-		fread(&temp, 4, 1, pFile); //读取4个字节到temp中 也就是读取一个int类型的数据  前4个字节是顶点数量？为什么是4个字节 因为int类型在大多数平台上占用4个字节
+		fread(&temp, 4, 1, pFile); //读取4个字节到temp中 也就是读取一个int类型的数据(int 占四字节)   这是读取顶点数量
 		mVertexCount = temp; //将读取到的顶点数量赋值给成员变量
 		mVertexData = new StaticMeshComponentVertexData[mVertexCount]; //根据顶点数量分配内存
 		fread(mVertexData, 1, sizeof(StaticMeshComponentVertexData) * mVertexCount, pFile); //?读取顶点数据到mVertexData中 这里的1是每次读取的字节数 sizeof(StaticMeshComponentVertexData) * mVertexCount是总共要读取的字节数
