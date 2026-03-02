@@ -60,5 +60,8 @@ public:
 
 	void InitFromFile(ID3D12GraphicsCommandList* inCommandList, const char* inFilePath);
 
+
+	void Render(ID3D12GraphicsCommandList* inCommandList);
+
 };
 

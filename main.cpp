@@ -201,7 +201,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	WaitForCompletionOfCommandList();
 
 
-	D3D12_VERTEX_BUFFER_VIEW vbos[] = { staticMeshComponent.mVBOView };
+
 
 
 
@@ -264,15 +264,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); //设置图元类型  这里是三角形列表  每三个点组成一个三角形
 
-			gCommandList->IASetVertexBuffers(0,1,vbos); //绑定vbo
 
-			
+			staticMeshComponent.Render(gCommandList);
 
-			for (auto iter = staticMeshComponent.mSubMeshes.begin();iter != staticMeshComponent.mSubMeshes.end(); iter++) 
-			{
-				gCommandList->IASetIndexBuffer(&iter->second->mIBView);
-				gCommandList->DrawIndexedInstanced(iter->second->mIndexCount, 1, 0, 0, 0);
-			}
+
 
 
 			//gCommandList->DrawInstanced(3, 1, 0, 0); //正式下达 画图命令 

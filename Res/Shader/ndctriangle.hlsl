@@ -18,6 +18,8 @@ cbuffer DefaultVertexCB:register(b1){
 };
 
 
+#define PI 3.1415
+
 
 struct VertexDate{
 
@@ -33,7 +35,7 @@ struct VertexDate{
 struct VSout{
 
     float4 position : SV_POSITION;
-    float4 color : COLOR0;
+    float4 normal : NORMAL;
 };
 
 
@@ -50,23 +52,36 @@ VSout MainVS(VertexDate inVertexData){
     vo.position = mul(ProjectionMatrix,posVS);
 
 
-    vo.color = float4(inVertexData.normal.xyz,1.0); 
+    vo.normal = inVertexData.normal; 
     return vo;
 }
 
 
 
 
-float4 MainPS(VSout inPSInput) : SV_TARGET{
+half4 MainPS(VSout inPSInput) : SV_TARGET{
 
-    float3 ambientColor = float3(0.1,0.1,0.1); //环境光颜色
+    float3 N=normalize(inPSInput.normal.xyz); 
 
-    float3 diffuseColor = float3(0.0,0.0,0.0); 
 
-    float3 specularColor = float3(0.0,0.0,0.0); 
+    half3 bottomColor = half3(0.1h,0.4h,0.6h);
+    half3 topColor = half3(0.7h,0.7h,0.7h);
 
-    float3 surfaceColor = ambientColor + diffuseColor + specularColor;  
+    
+    float theta = acos(N.y); //法线与y轴的夹角 -PI/2 ~ PI/2
+    theta/= PI; //归一化到0~1之间
+    theta+=0.5f; //调整到0~1之间
 
-    return float4(surfaceColor,1.0); 
+    half ambientIns = 0.2h; 
+
+    half3 ambientColor = lerp(bottomColor,topColor,theta) * ambientIns; 
+
+    half3 diffuseColor = half3(0.0h,0.0h,0.0h); 
+
+    half3 specularColor = half3(0.0h,0.0h,0.0h); 
+
+    half3 surfaceColor = ambientColor + diffuseColor + specularColor;  
+
+    return half4(surfaceColor,1.0); 
 
 }

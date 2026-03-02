@@ -886,7 +886,7 @@ void BeginRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //ID3D12G
 
 
 
-	const float clearColor[] = { 0.1f,0.4f,0.6f,1.0f }; //清屏颜色 RGBA
+	const float clearColor[] = { 0.0f,0.0f,0.0f,0.0f }; //清屏颜色 RGBA
 
 	inCommandList->ClearRenderTargetView(colorRT, clearColor, 0, nullptr); //清空当前RTV对应的资源（画布）  用上面定义的颜色来清空  这里是全屏清空 因为裁剪矩形和视口一样大
 	inCommandList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr); //清空DSV对应的资源（深度缓冲）  这里是全屏清空 因为裁剪矩形和视口一样大
