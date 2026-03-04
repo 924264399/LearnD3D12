@@ -181,8 +181,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	//3.计算 Model（模型）矩阵：代表物体在世界空间的位置  这里把所有物体统一往 +Z 方向移动 5 个单位（左手坐标系，+Z 是屏幕往里
 	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixTranslation(0.0f,0.0f,5.0f); 
 
+
+	//modelMatrix *= DirectX::XMMatrixRotationZ(90.0f * 3.1415926f / 180.0f);//旋转
+
+
+
 	DirectX::XMFLOAT4X4 tempMatrix; //【中间变量】用于存储单个矩阵
-	float matrices[48]; //最终数组
+	float matrices[64]; //最终数组
 
 	///中间这里转一遍  是因为XMMATRIX这个类型有奇葩的需求（对齐啥的  所以相对麻烦点 要XMMATRIX → XMFLOAT4X4 → float[] ）
 	DirectX::XMStoreFloat4x4(&tempMatrix, projectionMatrix); //把 Proj 矩阵存到 tempMatrix
@@ -194,8 +199,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	DirectX::XMStoreFloat4x4(&tempMatrix, modelMatrix);
 	memcpy(matrices+32, &tempMatrix, sizeof(float) * 16);
 
-	UpdateConstantBuffer(cb, matrices, sizeof(float)*48); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去  因为是3个矩阵 所以是16*3=48
 
+
+	//法线矩阵
+
+	DirectX::XMVECTOR determinant;
+
+	DirectX::XMMATRIX inverseModelMatrix = DirectX::XMMatrixInverse(&determinant, modelMatrix); //Inverse是逆矩阵
+
+	if (DirectX::XMVectorGetX(determinant) != 0.0f)
+	{
+		DirectX::XMMATRIX normalMatrix = DirectX::XMMatrixTranspose(inverseModelMatrix); //再转置
+
+		DirectX::XMStoreFloat4x4(&tempMatrix, modelMatrix);
+		memcpy(matrices + 48, &tempMatrix, sizeof(float) * 16);
+
+
+	} //这个矩阵就是o2w矩阵的逆转置矩阵 就是为了和顶点法线变换用的 为了抵消缩放影响 我们希望法线永远是垂直与模型表面的 
+
+
+
+
+	UpdateConstantBuffer(cb, matrices, sizeof(float)*64); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去  因为是3个矩阵 所以是16*3=48
 
 	EndCommandList();
 	WaitForCompletionOfCommandList();

@@ -52,7 +52,9 @@ VSout MainVS(VertexDate inVertexData){
     vo.position = mul(ProjectionMatrix,posVS);
 
 
-    vo.normal = inVertexData.normal; 
+    vo.normal = mul(IT_ModelMatrix,inVertexData.normal); 
+
+    //vo.normal = inVertexData.normal;
     return vo;
 }
 
@@ -68,11 +70,11 @@ half4 MainPS(VSout inPSInput) : SV_TARGET{
     half3 topColor = half3(0.7h,0.7h,0.7h);
 
     
-    float theta = acos(N.y); //法线与y轴的夹角 -PI/2 ~ PI/2
+    float theta = asin(N.y); //法线与y轴的夹角 -PI/2 ~ PI/2
     theta/= PI; //归一化到0~1之间
     theta+=0.5f; //调整到0~1之间
 
-    half ambientIns = 0.2h; 
+    half ambientIns = 1.0h; 
 
     half3 ambientColor = lerp(bottomColor,topColor,theta) * ambientIns; 
 
