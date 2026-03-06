@@ -8,6 +8,7 @@
 #pragma comment(lib,"d3d12.lib")  //链接D3D12库文件
 #pragma comment(lib,"dxgi.lib")   //链接DXGI库文件
 #pragma comment(lib,"d3dcompiler.lib")  //链接D3D编译器库文件
+#pragma comment(lib,"winmm.lib")
 
 
 
@@ -240,8 +241,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	float color[] = { 0.5f,0.5f,0.5f,1.0f };
 
 
-	////////////////////主循环  
+
 	MSG msg;
+
+	//时间系统
+	DWORD last_time = timeGetTime(); //帧计数器  用来演示动态变化的颜色     DWORD是 unsigned long 32位无符号整形的别名  是Windows API 定义的类型（为了统一）
+	                                //这里第一次获取的 last time应该是进入主循环的时间点  之后每一帧都用当前时间减去这个last time 就能得到程序运行了多久了  这个值是毫秒为单位的  比如运行了1秒 就是1000 毫秒
+									//然后在主循环里每一帧都更新一次这个last time 就能得到每一帧的时间差  也就是帧时间  
+
+	DWORD appStartTime = timeGetTime(); //程序开始时间  这个值在主循环里是不会变的  即他等于的这个last time是第一次获取的时间点  不是只会一直更新的last time
+
+
+	////////////////////主循环  
+
 	while (true) {
 
 		ZeroMemory(&msg, sizeof(MSG));
@@ -262,6 +274,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			//rendering
 
 			WaitForCompletionOfCommandList();//CPU 和 GPU同步   CPU 先等 GPU 干完上一帧的所有活，再开始新一帧的渲染  所以放在最开始
+
+
+
+			//时间系统（一个是帧时间 一个是程序运行时间）
+			DWORD current_time = timeGetTime();//获取当前时间（单位是毫秒)
+			DWORD frame_time = current_time - last_time; //计算帧时间（当前时间 - 上一帧数）
+			DWORD timeSinceAppStart = current_time - appStartTime; //计算程序运行时间（当前时间 - 程序开始时间）
+			last_time = current_time; //更新 last_time 为当前时间，为下一帧做准备
+			float frameTimeInSecond = float(frame_time) / 1000.0f; //把帧时间转换为秒  因为shader里用毫秒不方便
+			float timeSinceAppStartInSecond = float(timeSinceAppStart) / 1000.0f; //把程序运行时间转换为秒
+			color[0] = timeSinceAppStartInSecond;
+
+
 
 			gCommandAllocator->Reset();  //这个reset的作用是？ 清空内存   以及为什么使用命令分配器的方法？因为命令分配器是负责内存的 
 

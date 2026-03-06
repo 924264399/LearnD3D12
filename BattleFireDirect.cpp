@@ -432,8 +432,7 @@ ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature, D3D12_
 	posDesc.SampleMask = 0xffffffff; //采样掩码  32位？
 
 	posDesc.InputLayout = vertexDataLayoutDesc; //输入布局描述结构体
-	posDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; //图元类型  这个是三角形列表  还有线段列表 线段带 三角形扇等等
-
+	posDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; //图元类型  这个是三角形列表  还有线段列表 线段带 三角形扇等等 一般就是三角形 D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE   如果是要几何着色器的话 这个还要改成D3D12_PRIMITIVE_TOPOLOGY_TYPE_OINT
 	posDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID; //光栅化状态  填充模式  实心填充  还有线框模式 这个里是实心
 	posDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK; //剔除模式  剔除背面  还有正面剔除 和 不剔除
 

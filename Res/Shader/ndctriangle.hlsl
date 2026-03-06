@@ -3,7 +3,7 @@
 //unity的Properties { _MainTex ("Texture", 2D) = "white" {} } 这种写法 实际上是为了兼容api又套了一层壳
 cbuffer globalConstants:register(b0){
 
-    float4 color; //美术可调参数
+    float4 misc; // 全局变量 这是更签名的常量缓冲区
     
 };
 
@@ -49,12 +49,17 @@ VSout MainVS(VertexDate inVertexData){
     VSout vo;
 
     //变换
-    float4 posWS  = mul(ModelMatrix,inVertexData.position); // 这样是列矩阵  如果调换位置是行矩阵
+     vo.normal = mul(IT_ModelMatrix,inVertexData.normal); 
+
+    float4 posOS = inVertexData.position+ inVertexData.normal * sin(misc.x)*0.5f; //顶点偏移
+
+    float4 posWS  = mul(ModelMatrix,posOS) ; // 这样是列矩阵  如果调换位置是行矩阵
+
     float4 posVS = mul(ViewMatrix,posWS);
     vo.position = mul(ProjectionMatrix,posVS);
 
 
-    vo.normal = mul(IT_ModelMatrix,inVertexData.normal); 
+   
     vo.positionWS = posWS;
     vo.texcoord = inVertexData.texcoord;
 
