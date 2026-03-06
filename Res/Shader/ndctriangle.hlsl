@@ -3,7 +3,7 @@
 //unity的Properties { _MainTex ("Texture", 2D) = "white" {} } 这种写法 实际上是为了兼容api又套了一层壳
 cbuffer globalConstants:register(b0){
 
-    float4 misc; // 全局变量 这是更签名的常量缓冲区
+    float4 misc; // 全局变量 这是根签名的 根常量
     
 };
 
