@@ -159,7 +159,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 
 	ID3D12RootSignature* rootSignature = InitRootSignature(); //初始化根签名
-	D3D12_SHADER_BYTECODE vs, ps;
+	D3D12_SHADER_BYTECODE vs, ps; //如果有gs 还可以再这里添加一个  下面的编译 GS的主函数也要添加
 	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainVS", "vs_5_0", &vs);   //开始编译
 	CreateShaderFromFile(L"Res/Shader/ndctriangle.hlsl", "MainPS", "ps_5_0", &ps);
 

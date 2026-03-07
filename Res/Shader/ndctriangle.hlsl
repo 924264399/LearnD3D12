@@ -69,6 +69,30 @@ VSout MainVS(VertexDate inVertexData){
 
 
 
+// //测试GS
+// [maxvertexcount(4)]
+// void MainGS(point VSout input[1],uint inPrimitiveID:SV_PrimitiveID,inout PointStream<VSout> outPointStream) //这里传入的图元就是你c++那边写的图元类型 如是点就是点 是三角形就是三角形
+// {
+
+//     //输入一个点 输出一个三角形
+//     VSout v0 = input[0];
+//     VSout v1 = input[0];
+//     VSout v2 = input[0];
+
+//     v1.positionWS += float4(0.5f,0.0f,0.0f,0.0f); 
+//     v2.positionWS += float4(0.25f,0.5f,0.0f,0.0f); 
+
+//     outPointStream.Append(v0);
+//     outPointStream.Append(v1);
+//     outPointStream.Append(v2);
+//     outPointStream.RestartStrip(); //结束当前图元 重新开始新的图元
+
+// }
+
+
+
+
+
 
 half4 MainPS(VSout inPSInput) : SV_TARGET{
 
