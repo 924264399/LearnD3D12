@@ -76,7 +76,7 @@ void EndRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList);
 void SwapD3D12Buffers();
 
 
-
+ID3D12Resource* CreateTexture2D	(ID3D12GraphicsCommandList* incommandList);
 
 
 

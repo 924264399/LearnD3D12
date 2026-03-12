@@ -905,5 +905,175 @@ void EndRenderToSwapChain(ID3D12GraphicsCommandList* inCommandList)  //
 
 
 
+//创建texture
+ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
+{
+
+	D3D12_HEAP_PROPERTIES d3dHeapProperties = {}; //堆属性结构体  你要申请显存 得告诉显卡这个读写的具体位置
 
 
+	d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT; //默认堆 
+
+
+	D3D12_RESOURCE_DESC d3d12ResourceDesc = {}; //资源描述符结构体
+	d3d12ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
+	d3d12ResourceDesc.Alignment = 0;
+	d3d12ResourceDesc.Width = 256;  //长宽先写256
+	d3d12ResourceDesc.Height = 256;
+	d3d12ResourceDesc.DepthOrArraySize = 1; //1张贴图 如果是cubemap 给6（因为cubemap 本质是一个array）
+	d3d12ResourceDesc.MipLevels = 1; //需要多少层级的mip？ 
+	d3d12ResourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  //这就是RGBA
+	d3d12ResourceDesc.SampleDesc.Count = 1; //没有MSAA这些
+	d3d12ResourceDesc.SampleDesc.Quality = 0;  //关闭MSAA的化 这里必须是0  只有开启了MSAA才有意义 
+	d3d12ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  //就是创建出来用来干啥的  有纹理采样  有用来当RT的  目前先设置为UKNOWN 
+	d3d12ResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+
+	ID3D12Resource* texture = nullptr; //定义一个纹理资源指针  用来接收创建出来的纹理资源地址
+
+
+	gD3D12Device->CreateCommittedResource(
+		&d3dHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&d3d12ResourceDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST, //设置为拷贝的目标
+		nullptr,  //这是给RT专用的  这里是贴图就不用
+		IID_PPV_ARGS(&texture));
+
+
+
+	///////////////////////////////////////////////////////////下面这段代码看创建VBO里的 CreateBufferObject 这个函数里的注释  核心就是算打包规则 核心是拿到 “怎么把二维数据塞进一维内存” 的规则//////////////////////////////////////
+	
+
+	d3d12ResourceDesc = texture->GetDesc(); 
+	
+	UINT64 memorySizeUsed = 0; // 用来存：这个资源总共占多少内存
+	UINT64 rowSizeInBytes = 0; //用来存：每一行实际的数据大小（不含对齐
+	UINT rowUsed = 0;  //用来存：这个资源有多少行
+
+	//最重要的一个结构体：用来存“子资源在内存里的具体布局” 这个结构体的成员包括了这个资源在内存中的占用情况  包括了内存大小 行大小 行数等信息
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT subresourceFootprint;
+
+
+
+	//gD3D12Device->GetCopyableFootprints(
+	//	&d3d12ResourceDesc,  // [输入] 要算哪个资源的布局？
+	//	0,                    // [输入] 从第几个子资源开始算？
+	//	1,                    // [输入] 算几个子资源？
+	//	0,                    // [输入] 如果放在大堆里，偏移量是多少？
+	//	&subresourceFootprint,// [输出] 算出的具体布局信息放这
+	//	&rowUsed,             // [输出] 算出有多少行放这
+	//	&rowSizeInBytes,      // [输出] 算出每行数据大小放这
+	//	&memorySizeUsed       // [输出] 算出总内存大小放这
+	//);
+
+
+	//调用 GetCopyableFootprints 计算布局
+	gD3D12Device->GetCopyableFootprints(
+		&d3d12ResourceDesc, //算这个资源
+		0, //第一个子资源索引  这里是0  因为我们只有1个子资源
+		1, //子资源数量  这里是1  因为我们只有1个子资源
+		0, //内存偏移量  这里是0  表示从内存的起始位置开始计算
+		&subresourceFootprint,
+		&rowUsed,				//行数  对于 Buffer：通常是 1（因为 Buffer 是线性的，一行就存完了）。   Texture：通常是height。
+		&rowSizeInBytes,         //对于 Buffer：等于 Width（就是你实际的数据大小，不含 padding）
+		&memorySizeUsed			//对于 Buffer：等于 rowSizeInBytes（因为只有一行）。 Texture：等于 rowSizeInBytes * height（因为有多行）。
+	);
+
+
+
+	////////////////////////////////////////////////////////////////////开始申请临时缓冲区  这个是中转站 所以要cpu写  Gpu读  这玩意就是中转站///////////////////////////////////////////////////////////
+	//这玩意是一维的 上面texture是二维的
+
+	ID3D12Resource* tempBufferObject = nullptr;
+
+	D3D12_HEAP_PROPERTIES d3dTempHeapProperties = {}; //堆属性结构体  
+	d3dTempHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; //这个是cpu写  Gpu读
+
+
+
+	D3D12_RESOURCE_DESC d3d12TempResourceDesc = {}; //资源描述符结构体
+	d3d12TempResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
+	d3d12TempResourceDesc.Alignment = 0;
+	d3d12TempResourceDesc.Width = memorySizeUsed;
+	d3d12TempResourceDesc.Height = 1;
+	d3d12TempResourceDesc.DepthOrArraySize = 1;
+	d3d12TempResourceDesc.MipLevels = 1;
+	d3d12TempResourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+	d3d12TempResourceDesc.SampleDesc.Count = 1;
+	d3d12TempResourceDesc.SampleDesc.Quality = 0;
+	d3d12TempResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	d3d12TempResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+
+
+
+
+	gD3D12Device->CreateCommittedResource(
+		&d3dTempHeapProperties,		//上传堆
+		D3D12_HEAP_FLAG_NONE,
+		&d3d12TempResourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,  //[4] 初始状态：通用读
+		nullptr,
+		IID_PPV_ARGS(&tempBufferObject)
+	);
+
+	/////////////////////////////////////////////////////////////////////////////然后拷贝数据    CPU 内存 → GPU 的「上传堆 (UPLOAD) 临时缓冲区」   老流程 map  memcpy  Unmap//////////////////////////////////////////////////////////////////////////
+
+
+
+
+	BYTE* pData;
+	tempBufferObject->Map(0, nullptr, reinterpret_cast<void**>(&pData)); //cpu 通过这个函数获取了 GPU某个资源内存块的地址
+	//这里是0表示第一个子资源  nullptr表示整个资源都映射了  reinterpret_cast<void**>(&pData)是把pData的地址转换成void**类型的地址  因为Map函数需要一个void**类型的参数来接收映射后的地址
+	//reinterpret_cast<void**>是C++的一个类型转换操作符，用于在不同类型之间进行强制转换。
+	// 在这里，它将pData的地址（BYTE*类型）转换为void**类型，以满足Map函数的参数要求（要求第三个参数是指向无类型指针的指针）
+
+
+	//对齐   “找好起点，然后一层一层把数据‘码’进 GPU 的内存里
+	BYTE* pDstTempBuffer = reinterpret_cast<BYTE*>(pData + subresourceFootprint.Offset); //pData是GPU内存的起始地址  subresourceFootprint.Offset是这个资源在GPU内存中的偏移量 
+	//pDstTempBuffer临时仓库的实际地址了（也就是我们要把数据搬到的临时buffer的地址）
+
+	const BYTE* pSrcData = nullptr;  //reinterpret_cast<BYTE*>(inData); //准备好 “货源起点”  这个是CPU内存里数据的起始地址  也就是我们要搬运的数据的来源地址（输入的顶点数据）  现在暂时没有 写null
+
+
+	//搬运  memcpy(目标地址, 源地址, 拷贝多少字节)
+	for (UINT i = 0; i < rowUsed; i++) {
+		memcpy(pDstTempBuffer + subresourceFootprint.Footprint.RowPitch * i, pSrcData + rowSizeInBytes * i, rowSizeInBytes);
+	}
+
+	//Unmap函数关闭cpu的权限    CPU 就不能再通过 pData 乱改这块内存了（避免和 GPU 抢着用导致冲突）
+	tempBufferObject->Unmap(0, nullptr);
+
+
+
+	//////////////////////////////////////////////////////////////////////// /  GPU内的搬运   上传堆 (快递站) → 默认堆 (高速仓库) 然后把纹理标签改为shader可读//////////////////////////////////////////
+
+
+
+	//上传堆（UPLOAD）：CPU 能写，但 GPU 读起来慢
+	//默认堆（DEFAULT）：CPU 不能碰，但 GPU 读 / 采样飞快
+
+
+	D3D12_TEXTURE_COPY_LOCATION dst = {};
+	dst.pResource = texture; //目的地是我们之前创建的纹理资源
+	dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX; //目的地的类型是子资源索引
+	dst.SubresourceIndex = 0; //目的地的子资源索引  因为我们只有1个子资源 所以是0
+
+
+	D3D12_TEXTURE_COPY_LOCATION src = {};
+	src.pResource = tempBufferObject; //来源是我们之前创建的临时缓冲区资源
+	src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; //来源的类型是放置的布局
+	src.PlacedFootprint = subresourceFootprint; //来源的具体布局信息  之前GetCopyableFootprints算出来的
+
+	inCommandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr); //执行拷贝命令  从 src 指定的临时缓冲区资源，按照 subresourceFootprint 定义的布局，拷贝到 dst 指定的纹理资源的第 0 个子资源上。
+
+	D3D12_RESOURCE_BARRIER barier = InitResourceBarrier(texture, D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);  //变为我们shader可以访问的状态
+
+	inCommandList->ResourceBarrier(1, &barier); //提交资源屏障，切换状态   这个东西 必须是要在「拷贝指令后、纹理被使用前」加
+
+
+	return texture;
+
+
+};
