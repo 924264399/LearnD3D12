@@ -993,7 +993,7 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 
 
 	D3D12_RESOURCE_DESC d3d12TempResourceDesc = {}; //资源描述符结构体
-	d3d12TempResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; //是Texture 
+	d3d12TempResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; //是Texture 
 	d3d12TempResourceDesc.Alignment = 0;
 	d3d12TempResourceDesc.Width = memorySizeUsed;
 	d3d12TempResourceDesc.Height = 1;
@@ -1020,6 +1020,35 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 
 	/////////////////////////////////////////////////////////////////////////////然后拷贝数据    CPU 内存 → GPU 的「上传堆 (UPLOAD) 临时缓冲区」   老流程 map  memcpy  Unmap//////////////////////////////////////////////////////////////////////////
 
+	// 这里是纹理图片数据
+	unsigned char* inData = new unsigned char[256 * 256 * 4];
+	memset(inData, 0, 256 * 256 * 4);
+
+	for (int y = 0;y < 256;y++)
+	{
+
+		for (int x = 0;x < 256;x++)
+		{
+			float radiusSqrt = float((x-128) * (x-128) + (y-128) * (y-128));
+			if (radiusSqrt <= 128 * 128)
+			{
+				float radius = sqrt(radiusSqrt);
+				float alpha = radius / 128.0f;
+
+				int pixelIndex = y * 256 + x;
+
+				//rgba   四个通道
+				inData[pixelIndex] = 255; 
+				inData[pixelIndex + 1] = 255;
+				inData[pixelIndex + 2] = 255;
+				inData[pixelIndex + 3] = unsigned char(255.0f * alpha);
+
+
+			}
+
+		}
+
+	}
 
 
 
@@ -1034,7 +1063,7 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 	BYTE* pDstTempBuffer = reinterpret_cast<BYTE*>(pData + subresourceFootprint.Offset); //pData是GPU内存的起始地址  subresourceFootprint.Offset是这个资源在GPU内存中的偏移量 
 	//pDstTempBuffer临时仓库的实际地址了（也就是我们要把数据搬到的临时buffer的地址）
 
-	const BYTE* pSrcData = nullptr;  //reinterpret_cast<BYTE*>(inData); //准备好 “货源起点”  这个是CPU内存里数据的起始地址  也就是我们要搬运的数据的来源地址（输入的顶点数据）  现在暂时没有 写null
+	const BYTE* pSrcData = reinterpret_cast<BYTE*>(inData);  //reinterpret_cast<BYTE*>(inData); //准备好 “货源起点”  这个是CPU内存里数据的起始地址  也就是我们要搬运的数据的来源地址（输入的顶点数据）  现在暂时没有 写null
 
 
 	//搬运  memcpy(目标地址, 源地址, 拷贝多少字节)

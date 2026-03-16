@@ -223,6 +223,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	UpdateConstantBuffer(cb, matrices, sizeof(float)*64); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去  因为是3个矩阵 所以是16*3=48
 
+	ID3D12Resource* texture = CreateTexture2D(gCommandList); //创建纹理资源  
+
+
 	EndCommandList();
 	WaitForCompletionOfCommandList();
 
