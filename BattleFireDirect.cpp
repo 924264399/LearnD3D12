@@ -1021,6 +1021,7 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 	/////////////////////////////////////////////////////////////////////////////然后拷贝数据    CPU 内存 → GPU 的「上传堆 (UPLOAD) 临时缓冲区」   老流程 map  memcpy  Unmap//////////////////////////////////////////////////////////////////////////
 
 	// 这里是纹理图片数据
+	//在 CPU 内存里，手动生成一张 256×256 的「白色径向渐变圆形透明纹理」
 	unsigned char* inData = new unsigned char[256 * 256 * 4];
 	memset(inData, 0, 256 * 256 * 4);
 
