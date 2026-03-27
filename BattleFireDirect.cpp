@@ -83,7 +83,7 @@ ID3D12RootSignature* InitRootSignature()
 {
 
 	///这个Parameter 给根常量用的
-	D3D12_ROOT_PARAMETER rootParameters[2];  //这玩意可以是数组哈  现在是有两个 一个是给根常量用的  另一个是给cbv用的
+	D3D12_ROOT_PARAMETER rootParameters[3];  //这玩意可以是数组哈  现在是有两个 一个是给根常量用的  另一个是给cbv用的  还有一个给贴图
 
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;  //是给根常量用的 所以是这个TYPE 实际还有cbv  srv ubv啥的
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; //只在vertex shader 如果都想用 则要改为all
@@ -101,10 +101,49 @@ ID3D12RootSignature* InitRootSignature()
 
 
 
+	//给贴图用的 在根签名开一个 PS 能用的贴图插槽（t0） 然后采样器是放到 s0
+	// 给SRV分配槽位
+
+	D3D12_DESCRIPTOR_RANGE descriptorRange[1];
+
+	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorRange[0].RegisterSpace = 0;
+	descriptorRange[0].BaseShaderRegister = 0;
+	descriptorRange[0].NumDescriptors = 1;
+	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+
+
+	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;  
+	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; //只在pixel shader中可以
+	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; //这是 “寄存器空间”  
+	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); 
+
+
+
+	//这是采样器的
+	D3D12_STATIC_SAMPLER_DESC samplerDesc[1];
+
+	memset(samplerDesc, 0, sizeof(D3D12_STATIC_SAMPLER_DESC)*_countof(samplerDesc));
+	samplerDesc[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;  //uv  clamp模式
+	samplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	samplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	samplerDesc[0].BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+	samplerDesc[0].MaxLOD = D3D12_FLOAT32_MAX;
+	samplerDesc[0].RegisterSpace = 0;
+	samplerDesc[0].ShaderRegister = 0;//s0
+	samplerDesc[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+
+
 	//根签名描述结构体 核心
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDese = {};  //根签名描述结构体  这个结构体的成员非常多  
 	rootSignatureDese.NumParameters = _countof(rootParameters); //数组的数量 目前是2个
 	rootSignatureDese.pParameters = rootParameters;
+
+	rootSignatureDese.NumStaticSamplers = _countof(samplerDesc);
+	rootSignatureDese.pStaticSamplers = samplerDesc;
 
 	rootSignatureDese.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT; //允许我们使用顶点缓冲区（VBO）和输入布局（Input Layout） 如果不设置这个 默认是关闭的 vs就用不了
 
@@ -1050,6 +1089,10 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 		}
 
 	}
+
+
+
+
 
 
 

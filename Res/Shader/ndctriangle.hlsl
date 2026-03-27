@@ -18,6 +18,10 @@ cbuffer DefaultVertexCB:register(b1){
 };
 
 
+Texture2D tex:register(t0);
+SamplerState samplerState:register(s0);
+
+
 #define PI 3.1415
 
 
