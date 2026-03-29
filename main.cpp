@@ -346,6 +346,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps); //把SRV所在的描述符堆绑定到命令列表  让GPU知道我们后续要用这个堆里的SRV资源了  第一个参数是堆的数量  第二个参数是堆的地址（指针） 因为我们这里只有一个堆 所以就是&srvHeap
 
+			///下面其实就是绑定资源 从更常量 到 CBV 到RTV 依据D3D12_ROOT_PARAMETER 数组的index来绑定
 			gCommandList->SetGraphicsRoot32BitConstants(0, 4, color, 0);//绑定「根常量」→ 根参数插槽 0 （0是D3D12_ROOT_PARAMETER数组的 第一位是）
 
 			gCommandList->SetGraphicsRootConstantBufferView(1, cb->GetGPUVirtualAddress()); //绑定CBV   （1 第一个参数对应D3D12_ROOT_PARAMETER 数组的index）   第二个参数是常量缓冲区对象的GPU地址
