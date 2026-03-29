@@ -240,6 +240,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		IID_PPV_ARGS(&srvHeap)
 	); //这句只是在给 SRV 申请“宿舍（内存）
 
+	// 前面描述符堆的创建是所有资源创建都有的  下面的创建view每个资源是不一样的
+	//对应 CBV 用 CreateConstantBufferView
+	//对应 UAV 用 CreateUnorderedAccessView
+	//这是创建视图的专属函数，每个视图类型都有自己的创建方法。
+
+
 	ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap }; //后续如果有其他类型的描述符堆（比如CBV_SRV_UAV类型的）也要放在这个数组里  因为SetDescriptorHeaps函数需要传入一个描述符堆数组  这个数组里包含了所有你想让shader访问的描述符堆
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {}; //采样器描述符结构体
 	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; //纹理格式  这里是我们创建纹理资源时指定的格式
@@ -340,11 +346,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps); //把SRV所在的描述符堆绑定到命令列表  让GPU知道我们后续要用这个堆里的SRV资源了  第一个参数是堆的数量  第二个参数是堆的地址（指针） 因为我们这里只有一个堆 所以就是&srvHeap
 
-			gCommandList->SetGraphicsRoot32BitConstants(0, 4, color, 0);//第一个参数对应D3D12_ROOT_PARAMETER 数组的index
+			gCommandList->SetGraphicsRoot32BitConstants(0, 4, color, 0);//绑定「根常量」→ 根参数插槽 0 （0是D3D12_ROOT_PARAMETER数组的 第一位是）
 
-			gCommandList->SetGraphicsRootConstantBufferView(1, cb->GetGPUVirtualAddress()); //CBV 绑定到根参数表  第一个参数对应D3D12_ROOT_PARAMETER 数组的index这里是第二个所以是1    第二个参数是常量缓冲区对象的GPU地址
+			gCommandList->SetGraphicsRootConstantBufferView(1, cb->GetGPUVirtualAddress()); //绑定CBV   （1 第一个参数对应D3D12_ROOT_PARAMETER 数组的index）   第二个参数是常量缓冲区对象的GPU地址
 
-			gCommandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart()); //SRV绑定到根参数表  第一个参数对应D3D12_ROOT_PARAMETER 数组的index这里是第三个所以是2   第二个参数是SRV在堆里的GPU地址  因为我们这里只有一个SRV 所以就是堆的起始地址
+			gCommandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart()); //绑定SRV （第一个参数对应D3D12_ROOT_PARAMETER 数组的index这里是第三个所以是2）   第二个参数是SRV在堆里的GPU地址  因为我们这里只有一个SRV 所以就是堆的起始地址
 
 			gCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); //设置图元类型  这里是三角形列表  每三个点组成一个三角形
 
