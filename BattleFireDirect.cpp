@@ -1078,10 +1078,10 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 				int pixelIndex = y * 256 + x;
 
 				//rgba   四个通道
-				inData[pixelIndex] = 255; 
-				inData[pixelIndex + 1] = 255;
-				inData[pixelIndex + 2] = 255;
-				inData[pixelIndex + 3] = unsigned char(255.0f * alpha);
+				inData[pixelIndex * 4] = 255; 
+				inData[pixelIndex * 4+ 1] = 255;
+				inData[pixelIndex * 4+ 2] = 255;
+				inData[pixelIndex * 4 + 3] = unsigned char(255.0f * alpha);
 
 
 			}
@@ -1150,3 +1150,10 @@ ID3D12Resource* CreateTexture2D(ID3D12GraphicsCommandList* inCommandList)
 
 
 };
+
+
+ID3D12Device* GetD3D12Device() {
+
+	return gD3D12Device;
+
+}

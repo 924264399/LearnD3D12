@@ -28,7 +28,7 @@ SamplerState samplerState:register(s0);
 struct VertexDate{
 
     float4 position : POSITION;
-    float4 texcoord : TEXCOORD0;
+    //float4 texcoord : TEXCOORD0;
 
     float4 normal : NORMAL;
     float4 tangent : TANGENT;
@@ -42,6 +42,7 @@ struct VSout{
     float4 normal : NORMAL;
     float4 texcoord : TEXCOORD0; 
     float4 positionWS : TEXCOORD1; 
+    float4 texcoord2 : TEXCOORD2; //预留纹理坐标2 用于其他用途
 };
 
 
@@ -65,7 +66,7 @@ VSout MainVS(VertexDate inVertexData){
 
    
     vo.positionWS = posWS;
-    vo.texcoord = inVertexData.texcoord;
+    vo.texcoord = float4(0.5,0.5,0.0f,0.0f); //这里直接给一个固定的纹理坐标 你可以根据需要计算出不同的纹理坐标
 
     //vo.normal = inVertexData.normal;
     return vo;
@@ -127,7 +128,7 @@ half4 MainPS(VSout inPSInput) : SV_TARGET{
      
 
 
-    half3 diffuseColor = LightColor * NoL; 
+    half3 diffuseColor = LightColor * NoL + tex.Sample(samplerState,inPSInput.texcoord.xy).rgb * NoL; 
 
     half3 specularColor = pow(NoH,16.0h) * LightColor ; 
 

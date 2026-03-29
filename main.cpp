@@ -226,6 +226,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ID3D12Resource* texture = CreateTexture2D(gCommandList); //创建纹理资源  
 
 
+	/////下面是给采样贴用的  SRV
+	ID3D12Device* d3dDevice = GetD3D12Device();
+
+	ID3D12DescriptorHeap* srvHeap = nullptr;
+
+	D3D12_DESCRIPTOR_HEAP_DESC d3dDescriptorHeapDescSRV = {}; //就是为了CreateDescriptorHeap 函数提供「创建描述符堆的「配置清单 / 需求说明书」」
+	d3dDescriptorHeapDescSRV.NumDescriptors = 1; //需要1  因为我们这里只创建一个SRV来绑定纹理资源
+	d3dDescriptorHeapDescSRV.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; //类型是是CBV_SRV_UAV 因为我们后续要创建SRV（Shader Resource View）来绑定纹理资源，而SRV属于这个类型的描述符堆
+	d3dDescriptorHeapDescSRV.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; //shader能访问
+	d3dDevice->CreateDescriptorHeap(
+		&d3dDescriptorHeapDescSRV,
+		IID_PPV_ARGS(&srvHeap)
+	); //这句只是在给 SRV 申请“宿舍（内存）
+
+	ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap }; //后续如果有其他类型的描述符堆（比如CBV_SRV_UAV类型的）也要放在这个数组里  因为SetDescriptorHeaps函数需要传入一个描述符堆数组  这个数组里包含了所有你想让shader访问的描述符堆
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {}; //采样器描述符结构体
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; //纹理格式  这里是我们创建纹理资源时指定的格式
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; //默认的分量映射  这个值是个宏定义 代表着一种默认的映射方式（RGBA）  这个值在大多数情况下都是正确的  除非你有特殊需求（比如只想采样纹理的R通道）才需要修改这个值
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; //视图维度  因为我们绑定的资源是纹理2D 所以视图维度就是纹理2D
+	srvDesc.Texture2D.MipLevels = 1; //我们创建的纹理资源只有1层mip 所以这里也是1  如果有多层mip 就要设置成对应的层数  也可以设置成-1  代表全部层级
+
+	d3dDevice->CreateShaderResourceView(
+		texture, //要绑定的资源
+		&srvDesc, //SRV描述符 这里用默认的就行 因为是纹理2D 默认的SRV描述符就是正确的
+		srvHeap->GetCPUDescriptorHandleForHeapStart() //SRV描述符在堆里的具体位置  因为我们这里只有一个SRV 所以就是堆的起始地址
+	); //创建真正的 SRV 并存入堆中
+
 	EndCommandList();
 	WaitForCompletionOfCommandList();
 
@@ -311,9 +338,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 			gCommandList->SetGraphicsRootSignature(rootSignature);  //设置根签名  
 
+			gCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps); //把SRV所在的描述符堆绑定到命令列表  让GPU知道我们后续要用这个堆里的SRV资源了  第一个参数是堆的数量  第二个参数是堆的地址（指针） 因为我们这里只有一个堆 所以就是&srvHeap
+
 			gCommandList->SetGraphicsRoot32BitConstants(0, 4, color, 0);//第一个参数对应D3D12_ROOT_PARAMETER 数组的index
 
 			gCommandList->SetGraphicsRootConstantBufferView(1, cb->GetGPUVirtualAddress()); //CBV 绑定到根参数表  第一个参数对应D3D12_ROOT_PARAMETER 数组的index这里是第二个所以是1    第二个参数是常量缓冲区对象的GPU地址
+
+			gCommandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart()); //SRV绑定到根参数表  第一个参数对应D3D12_ROOT_PARAMETER 数组的index这里是第三个所以是2   第二个参数是SRV在堆里的GPU地址  因为我们这里只有一个SRV 所以就是堆的起始地址
 
 			gCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); //设置图元类型  这里是三角形列表  每三个点组成一个三角形
 

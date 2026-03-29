@@ -79,5 +79,5 @@ void SwapD3D12Buffers();
 ID3D12Resource* CreateTexture2D	(ID3D12GraphicsCommandList* incommandList);
 
 
-
+ID3D12Device* GetD3D12Device();
 
