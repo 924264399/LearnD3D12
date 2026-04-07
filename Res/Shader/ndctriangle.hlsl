@@ -125,15 +125,16 @@ half4 MainPS(VSout inPSInput) : SV_TARGET{
    
     half NoL = saturate(dot(N,L)); 
     half NoH = saturate(dot(N,H));
+    half NoV = saturate(dot(N,V));
      
+    half4 texColor = tex.Sample(samplerState,inPSInput.texcoord.xy);
 
-
-    half3 diffuseColor = LightColor * NoL + tex.Sample(samplerState,inPSInput.texcoord.xy).rgb * NoL; 
+    half3 diffuseColor = LightColor * NoL + texColor.rgb * NoV; 
 
     half3 specularColor = pow(NoH,16.0h) * LightColor ; 
 
     half3 surfaceColor = ambientColor + diffuseColor + specularColor;  
 
-    return half4(surfaceColor,1.0); 
+    return half4(surfaceColor,NoL*0.5h); 
 
 }

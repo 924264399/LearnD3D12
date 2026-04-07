@@ -494,15 +494,15 @@ ID3D12PipelineState* createPSO(ID3D12RootSignature* inD3D12RootSignature, D3D12_
 	posDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL; //深度比较函数  小于等于 即近的覆盖远的
 
 	D3D12_RENDER_TARGET_BLEND_DESC rtBlendDesc = {}; //默认渲染目标混合描述结构体
-	rtBlendDesc.BlendEnable = FALSE; //混合启用  这里是FALSE  表示不启用混合
+	rtBlendDesc.BlendEnable = TRUE; //混合启用  这里是FALSE  表示不启用混合
 	rtBlendDesc.LogicOpEnable = FALSE; //逻辑操作启用  这里是FALSE  表示不启用逻辑操作
-	rtBlendDesc.SrcBlend = D3D12_BLEND_ONE; //源混合因子  这里是一个默认值  因为我们没有启用混合
-	rtBlendDesc.DestBlend = D3D12_BLEND_ZERO; //目标混合因子  这里是一个默认值  因为我们没有启用混合
-	rtBlendDesc.BlendOp = D3D12_BLEND_OP_ADD; //混合操作  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA; //源混合因子  
+	rtBlendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA; //目标混合因子  
+	rtBlendDesc.BlendOp = D3D12_BLEND_OP_ADD; //混合操作  
 
-	rtBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE; //源混合因子（Alpha）  这里是一个默认值  因为我们没有启用混合
-	rtBlendDesc.DestBlendAlpha = D3D12_BLEND_ZERO; //目标混合因子（Alpha）  这里是一个默认值  因为我们没有启用混合
-	rtBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD; //混合操作（Alpha）  这里是一个默认值  因为我们没有启用混合
+	rtBlendDesc.SrcBlendAlpha = D3D12_BLEND_SRC_ALPHA; //源混合因子（Alpha）  
+	rtBlendDesc.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA; //目标混合因子（Alpha）  
+	rtBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD; //混合操作（Alpha）  
 
 	rtBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP; //逻辑操作  这里是一个默认值  因为我们没有启用逻辑操作
 	rtBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL; //渲染目标写入掩码  写入所有颜色分量
