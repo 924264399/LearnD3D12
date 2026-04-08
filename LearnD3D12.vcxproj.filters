@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="stbi">
+      <UniqueIdentifier>{35288258-ba29-4888-bf12-a1bc47ed533c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -27,6 +30,9 @@
     <ClCompile Include="Utils.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="stbi\stb_image.cpp">
+      <Filter>stbi</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="StaticMeshComponent.h">
@@ -37,6 +43,9 @@
     </ClInclude>
     <ClInclude Include="Utils.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="stbi\stb_image.h">
+      <Filter>stbi</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

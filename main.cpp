@@ -223,7 +223,46 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	UpdateConstantBuffer(cb, matrices, sizeof(float)*64); //把数据更新到常量缓冲区对象里  这个函数里会把数据从CPU内存复制到GPU内存里去  因为是3个矩阵 所以是16*3=48
 
-	ID3D12Resource* texture = CreateTexture2D(gCommandList); //创建纹理资源  
+
+
+
+	// 这里是纹理图片数据
+//在 CPU 内存里，手动生成一张 256×256 的「白色径向渐变圆形透明纹理」
+	unsigned char* pixels = new unsigned char[256 * 256 * 4];
+	memset(pixels, 0, 256 * 256 * 4);
+
+	for (int y = 0;y < 256;y++)
+	{
+
+		for (int x = 0;x < 256;x++)
+		{
+			float radiusSqrt = float((x - 128) * (x - 128) + (y - 128) * (y - 128));
+			if (radiusSqrt <= 128 * 128)
+			{
+				float radius = sqrt(radiusSqrt);
+				float alpha = radius / 128.0f;
+
+				int pixelIndex = y * 256 + x;
+
+				//rgba   四个通道
+				pixels[pixelIndex * 4] = 255;
+				pixels[pixelIndex * 4 + 1] = 255;
+				pixels[pixelIndex * 4 + 2] = 255;
+				pixels[pixelIndex * 4 + 3] = unsigned char(255.0f * alpha);
+
+
+			}
+
+		}
+
+	}
+
+
+
+
+	ID3D12Resource* texture = CreateTexture2D(gCommandList, pixels,256*256*4,256,256 ,DXGI_FORMAT_R8G8B8A8_UNORM); //创建纹理资源   256*256像素 *4字节
+
+	delete[] pixels; //创建完纹理资源后就可以把CPU内存里的像素数据释放掉了  因为GPU已经有自己的副本了 ()
 
 
 	/////下面是给采样贴用的  SRV
